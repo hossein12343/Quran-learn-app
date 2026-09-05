@@ -13,6 +13,8 @@ import 'shared/services/app_state.dart';
 import 'shared/services/audio.dart';
 import 'shared/services/audio_impl/audio_factory.dart';
 import 'shared/services/oauth/web_nav.dart';
+import 'shared/services/recite_check.dart';
+import 'shared/services/recite_check_impl/recite_check_factory.dart';
 import 'shared/services/reminder_impl/reminder_factory.dart';
 import 'shared/services/reminders.dart';
 import 'shared/services/settings.dart';
@@ -137,6 +139,7 @@ void main() {
   sfx = createSoundEffects();
   sfx.warmUp();
   reminders = createReminderService();
+  reciteGrader = createReciteGrader();
   if (kIsWeb) {
     _installDailyReminderWatch();
     appState.addListener(_maybeResubscribePush);

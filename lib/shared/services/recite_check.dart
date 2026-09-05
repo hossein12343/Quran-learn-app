@@ -22,11 +22,15 @@ class ReciteResult {
 
 /// Recite-aloud grading.
 ///
-/// Real capture needs three things this build cannot install: a recorder
-/// (`record`), permissions (`permission_handler`), and a recogniser. On
-/// Android the microphone permission must also be declared in
-/// AndroidManifest.xml — a missing declaration there is why the prompt never
-/// appeared in your earlier APK. See BACKEND.md → Recite-aloud.
+/// Real on web: `recite_check_impl/recite_check_factory_web.dart` backs
+/// this with the browser's own Speech Recognition API for the transcript
+/// and a Web Audio `AnalyserNode` for the live level meter — no pub.dev
+/// package needed, same reasoning as `sfx.dart`/`reminders.dart`. Off-web
+/// this stays the [UnavailableGrader] below: a native build would need a
+/// recorder package, a permissions package, and (on Android) the
+/// microphone permission declared in AndroidManifest.xml, none of which
+/// this project ships since it only targets web. See BACKEND.md →
+/// Recite-aloud.
 abstract class ReciteGrader {
   bool get available;
 
