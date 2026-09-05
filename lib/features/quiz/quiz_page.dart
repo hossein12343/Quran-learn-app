@@ -10,6 +10,7 @@ import '../../core/widgets/mascot.dart';
 import '../../shared/data/quran_seed.dart';
 import '../../shared/services/app_state.dart';
 import '../../shared/services/audio.dart';
+import '../../shared/services/recite_check.dart';
 import '../../shared/services/settings.dart';
 import '../../shared/services/sfx.dart' as tone;
 import 'quiz_engine.dart';
@@ -79,6 +80,15 @@ class _QuizPageState extends State<QuizPage> {
   int _left = 0;
   final DateTime _startedAt = DateTime.now();
 
+  // Optional, ungraded self-check on the "repeat along" teach step — see
+  // `_reciteCheckPanel`. Purely additive: it never touches `_s` (the
+  // actual session/gating state), only reports back what the microphone
+  // heard so the learner can judge for themselves before tapping
+  // "تکرار کردم" the same way they always could.
+  ReciteResult? _reciteResult;
+  bool _reciteGrading = false;
+  String? _reciteError;
+
   @override
   void initState() {
     super.initState();
@@ -88,6 +98,7 @@ class _QuizPageState extends State<QuizPage> {
   @override
   void dispose() {
     _timer?.cancel();
+    if (reciteGrader.isRecording.value) unawaited(reciteGrader.cancel());
     super.dispose();
   }
 
@@ -108,6 +119,7 @@ class _QuizPageState extends State<QuizPage> {
 
   void _load() {
     _timer?.cancel();
+    if (reciteGrader.isRecording.value) unawaited(reciteGrader.cancel());
     final ex = _s.next();
 
     setState(() {
@@ -117,6 +129,9 @@ class _QuizPageState extends State<QuizPage> {
       _fb = _Fb.none;
       _justHeld = false;
       _left = ex?.seconds ?? 0;
+      _reciteResult = null;
+      _reciteGrading = false;
+      _reciteError = null;
     });
 
     if (ex?.seconds != null) {
@@ -153,6 +168,51 @@ class _QuizPageState extends State<QuizPage> {
     if (ex == null) return;
     _s.acknowledgeTeach(ex);
     _load();
+  }
+
+  /// Starts or stops the optional microphone self-check on a "repeat
+  /// along" step. Entirely separate from `_continueTeach`/`_s` — recording
+  /// never blocks or auto-advances the exercise, and a failure (mic denied,
+  /// unsupported browser) only ever surfaces as inline text here, the same
+  /// "nice-to-have, never disruptive" treatment `_playAyah` gives a failed
+  /// audio fetch.
+  Future<void> _toggleReciteCheck(Exercise ex) async {
+    if (reciteGrader.isRecording.value) {
+      setState(() {
+        _reciteGrading = true;
+        _reciteError = null;
+      });
+      try {
+        final result = await reciteGrader.stopAndGrade(ex.arabic!);
+        if (!mounted) return;
+        setState(() {
+          _reciteResult = result;
+          _reciteGrading = false;
+        });
+        result.passed ? Sfx.right() : Sfx.wrong();
+      } on Object catch (e) {
+        if (!mounted) return;
+        setState(() {
+          _reciteGrading = false;
+          _reciteError = 'بررسی تلفظ انجام نشد: $e';
+        });
+      }
+      return;
+    }
+
+    setState(() {
+      _reciteResult = null;
+      _reciteError = null;
+    });
+    try {
+      await reciteGrader.start();
+      if (!mounted) return;
+      setState(() {}); // isRecording flips via the ValueListenable itself.
+    } on Object catch (_) {
+      if (!mounted) return;
+      setState(() => _reciteError =
+          'میکروفون در دسترس نیست. اجازهٔ دسترسی را بررسی کنید.');
+    }
   }
 
   bool get _hasAnswer {
@@ -461,8 +521,114 @@ class _QuizPageState extends State<QuizPage> {
               style: Theme.of(context).textTheme.bodyLarge,
             ),
           ],
+          if (!listen && reciteGrader.available) ...[
+            const SizedBox(height: AppSpacing.xl),
+            _reciteCheckPanel(ex),
+          ],
         ],
       ),
+    );
+  }
+
+  /// Optional, ungraded self-check for a "repeat along" step — real
+  /// microphone capture via `reciteGrader` (see `recite_check.dart`), but
+  /// entirely separate from the session's own scoring: whatever this shows
+  /// never changes hearts, `held`, or whether the ayah clears. Only shown
+  /// when `reciteGrader.available` (today: browsers shipping the Web
+  /// Speech API), so the fallback everywhere else stays exactly what it
+  /// already was — tap "تکرار کردم" once you've repeated it aloud.
+  Widget _reciteCheckPanel(Exercise ex) {
+    return ValueListenableBuilder<bool>(
+      valueListenable: reciteGrader.isRecording,
+      builder: (context, recording, _) {
+        final result = _reciteResult;
+        return Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(AppSpacing.lg),
+          decoration: BoxDecoration(
+            color: AppColors.blueLight,
+            borderRadius: BorderRadius.circular(AppRadius.lg),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      recording
+                          ? 'در حال گوش دادن… وقتی تمام شد دوباره ضربه بزنید.'
+                          : 'می‌خواهید بسنجید تلفظ‌تان چقدر نزدیک است؟',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.md),
+                  Pressable(
+                    onTap: _reciteGrading ? null : () => _toggleReciteCheck(ex),
+                    child: Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: recording ? AppColors.red : AppColors.blue,
+                      ),
+                      child: _reciteGrading
+                          ? const Padding(
+                              padding: EdgeInsets.all(14),
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: AppColors.white,
+                              ),
+                            )
+                          : Icon(
+                              recording ? Icons.stop_rounded : Icons.mic_rounded,
+                              color: AppColors.white,
+                            ),
+                    ),
+                  ),
+                ],
+              ),
+              if (recording) ...[
+                const SizedBox(height: AppSpacing.sm),
+                ValueListenableBuilder<double>(
+                  valueListenable: reciteGrader.level,
+                  builder: (context, level, _) => ClipRRect(
+                    borderRadius: BorderRadius.circular(4),
+                    child: LinearProgressIndicator(
+                      value: level.clamp(0.05, 1.0),
+                      minHeight: 6,
+                      backgroundColor: AppColors.white,
+                      valueColor:
+                          const AlwaysStoppedAnimation(AppColors.blueDark),
+                    ),
+                  ),
+                ),
+              ],
+              if (_reciteError != null) ...[
+                const SizedBox(height: AppSpacing.sm),
+                Text(_reciteError!,
+                    style: Theme.of(context)
+                        .textTheme
+                        .bodySmall
+                        ?.copyWith(color: AppColors.error)),
+              ],
+              if (result != null) ...[
+                const SizedBox(height: AppSpacing.sm),
+                Text(
+                  result.passed
+                      ? 'شنیده شد — به آیه نزدیک بود.'
+                      : 'شنیده شد، ولی چند کلمه مطابقت نداشت. دوباره تلاش '
+                          'کنید یا با صدای بلندتر بخوانید.',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: result.passed
+                          ? AppColors.success
+                          : AppColors.warning),
+                ),
+              ],
+            ],
+          ),
+        );
+      },
     );
   }
 
