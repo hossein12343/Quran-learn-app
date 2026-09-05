@@ -1,0 +1,72 @@
+# Miscellaneous
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+.atom/
+.build/
+.buildlog/
+.history
+.svn/
+.swiftpm/
+migrate_working_dir/
+
+# IntelliJ related
+*.iml
+*.ipr
+*.iws
+.idea/
+
+# The .vscode folder contains launch configuration and tasks you configure in
+# VS Code which you may wish to be included in version control, so this line
+# is commented out by default.
+#.vscode/
+
+# Flutter/Dart/Pub related
+**/doc/api/
+**/ios/Flutter/.last_build_id
+.dart_tool/
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+# The release web build IS the deploy artifact for this project's
+# Cloudflare Pages setup — Cloudflare's build image has no Flutter SDK,
+# so rather than teach it to install one, `build/web` is built locally
+# (same as every test this whole project session) and committed as the
+# thing actually served. Everything else under build/ (intermediate
+# .dart_tool-style output, other platforms never targeted) stays ignored.
+/build/*
+!/build/web
+/coverage/
+
+# Symbolication related
+app.*.symbols
+
+# Obfuscation related
+app.*.map.json
+
+# Android Studio will place build artifacts here
+/android/app/debug
+/android/app/profile
+/android/app/release
+
+# Widget Preview related
+.widget_preview/
+
+# Secrets — never committed, by policy, even if one shows up locally.
+# Nothing in this project currently lives in a local secret file (every
+# real secret — VAPID keys, the cron shared secret, the Turnstile secret
+# key — lives in Supabase's own database/dashboard, never on disk here),
+# but this stays in place as a real guardrail for whenever a deploy
+# pipeline (Cloudflare Pages / Vercel / Firebase Hosting, etc.) or a
+# future local `.env` file enters the picture.
+.env
+.env.*
+*.pem
+*.key
+*secret*
+*credentials*
+google-services.json
+GoogleService-Info.plist
+

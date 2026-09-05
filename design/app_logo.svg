@@ -1,0 +1,69 @@
+<svg viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="512" y2="512" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#12A47E"/>
+      <stop offset="1" stop-color="#07422F"/>
+    </linearGradient>
+    <linearGradient id="gilt" x1="180" y1="120" x2="340" y2="400" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#E4C25C"/>
+      <stop offset="0.55" stop-color="#C79A2E"/>
+      <stop offset="1" stop-color="#9E7A20"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="256" cy="230" r="230" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.16"/>
+      <stop offset="0.6" stop-color="#FFFFFF" stop-opacity="0.05"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </radialGradient>
+    <clipPath id="starClip">
+      <path d="M 242.21 120.40 Q 256.00 89.40 269.79 120.40 L 288.18 161.73 Q 301.96 192.73 335.71 196.27 L 380.70 200.98 Q 414.45 204.52 389.22 227.21 L 355.59 257.47 Q 330.37 280.17 337.44 313.35 L 346.86 357.60 Q 353.93 390.78 324.55 373.81 L 285.38 351.17 Q 256.00 334.20 226.62 351.17 L 187.45 373.81 Q 158.07 390.78 165.14 357.60 L 174.56 313.35 Q 181.63 280.17 156.41 257.47 L 122.78 227.21 Q 97.55 204.52 131.30 200.98 L 176.29 196.27 Q 210.04 192.73 223.82 161.73 Z"/>
+    </clipPath>
+    <filter id="softShadow" x="-40%" y="-40%" width="180%" height="180%">
+      <feDropShadow dx="0" dy="10" stdDeviation="14" flood-color="#03231A" flood-opacity="0.35"/>
+    </filter>
+    <mask id="moonMask">
+      <circle cx="361.40" cy="154.00" r="57.80" fill="#FFFFFF"/>
+      <circle cx="393.19" cy="135.50" r="49.71" fill="#000000"/>
+    </mask>
+  </defs>
+
+  <!-- App-icon background: rounded square, emerald gradient -->
+  <rect x="0" y="0" width="512" height="512" rx="112" ry="112" fill="url(#bg)"/>
+
+  <!-- Faint star-field texture, matching the app's StarField motif -->
+  <g fill="#FFFFFF" opacity="0.5">
+    <circle cx="78" cy="96" r="2.4"/>
+    <circle cx="118" cy="356" r="1.8"/>
+    <circle cx="64" cy="260" r="1.6"/>
+    <circle cx="150" cy="440" r="2.2"/>
+    <circle cx="432" cy="88" r="2"/>
+    <circle cx="454" cy="300" r="2.6"/>
+    <circle cx="410" cy="410" r="1.8"/>
+    <circle cx="60" cy="150" r="1.4"/>
+    <circle cx="446" cy="188" r="1.6"/>
+    <circle cx="256" cy="60" r="1.6"/>
+    <circle cx="330" cy="450" r="1.8"/>
+  </g>
+  <rect x="0" y="0" width="512" height="512" rx="112" ry="112" fill="url(#glow)"/>
+
+  <!-- Mascot: star-and-crescent, with soft ambient shadow -->
+  <g filter="url(#softShadow)">
+    <!-- Crescent moon, tucked behind the star's upper-right point -->
+    <circle cx="361.40" cy="154.00" r="57.80" fill="url(#gilt)" mask="url(#moonMask)"/>
+
+    <!-- Star body -->
+    <path fill="url(#gilt)"
+      d="M 242.21 120.40 Q 256.00 89.40 269.79 120.40 L 288.18 161.73 Q 301.96 192.73 335.71 196.27 L 380.70 200.98 Q 414.45 204.52 389.22 227.21 L 355.59 257.47 Q 330.37 280.17 337.44 313.35 L 346.86 357.60 Q 353.93 390.78 324.55 373.81 L 285.38 351.17 Q 256.00 334.20 226.62 351.17 L 187.45 373.81 Q 158.07 390.78 165.14 357.60 L 174.56 313.35 Q 181.63 280.17 156.41 257.47 L 122.78 227.21 Q 97.55 204.52 131.30 200.98 L 176.29 196.27 Q 210.04 192.73 223.82 161.73 Z"/>
+
+    <!-- Soft highlight, clipped to the star silhouette -->
+    <g clip-path="url(#starClip)">
+      <circle cx="208.40" cy="201.60" r="93.50" fill="#FFFFFF" opacity="0.18"/>
+    </g>
+
+    <!-- Face: happy eyes + smile -->
+    <g stroke="#3A362F" fill="none" stroke-linecap="round">
+      <path d="M 231.87 266.64 A 28.90 28.90 0 0 1 178.13 266.64" stroke-width="17"/>
+      <path d="M 333.87 266.64 A 28.90 28.90 0 0 1 280.13 266.64" stroke-width="17"/>
+      <path d="M 290.11 300.94 A 35.70 25.50 0 0 1 221.89 300.94" stroke-width="16.15"/>
+    </g>
+  </g>
+</svg>
