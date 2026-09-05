@@ -1,0 +1,14 @@
+{
+  "name": "quran-learn-app",
+  "compatibility_date": "2026-09-05",
+  "assets": {
+    "directory": "./build/web",
+    // Any request that doesn't match a real file (e.g. a deep link like
+    // /onboarding) falls back to index.html instead of 404ing, so
+    // Flutter's own path-based router can handle it client-side — this
+    // is the exact thing the plain `python -m http.server` used for
+    // local testing all session could NOT do (confirmed live earlier:
+    // navigating straight to /onboarding or /splash 404'd there).
+    "not_found_handling": "single-page-application"
+  }
+}
