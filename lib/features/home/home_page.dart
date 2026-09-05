@@ -7,6 +7,7 @@ import '../../core/widgets/pattern_overlay.dart';
 import '../../shared/data/quran_seed.dart';
 import '../../shared/services/app_state.dart';
 import '../quiz/quiz_page.dart';
+import '../review/review_page.dart';
 
 class HomePage extends StatefulWidget {
   final VoidCallback onGoToLearn;
@@ -155,6 +156,12 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
+  void _openReviewList() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => const ReviewPage()),
+    );
+  }
+
   Widget _reviewBanner() {
     final due = appState.dueForReview;
     final first = due.first;
@@ -180,23 +187,28 @@ class _HomePageState extends State<HomePage> {
           ),
           const SizedBox(width: AppSpacing.md),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  due.length == 1
-                      ? 'وقت مرور سوره ${first.surah.englishName} است'
-                      : '${due.length} سطح برای مرور آماده است',
-                  style: Theme.of(context)
-                      .textTheme
-                      .titleMedium
-                      ?.copyWith(color: AppColors.secondaryDark),
-                ),
-                Text(
-                  'یک یادآوری سریع بدون کمک، آن را در حافظه نگه می‌دارد.',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-              ],
+            child: Pressable(
+              onTap: due.length > 1 ? _openReviewList : _openReview,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    due.length == 1
+                        ? 'وقت مرور سوره ${first.surah.englishName} است'
+                        : '${due.length} سطح برای مرور آماده است',
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleMedium
+                        ?.copyWith(color: AppColors.secondaryDark),
+                  ),
+                  Text(
+                    due.length > 1
+                        ? 'برای دیدن همه ضربه بزن.'
+                        : 'یک یادآوری سریع بدون کمک، آن را در حافظه نگه می‌دارد.',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
+              ),
             ),
           ),
           Pressable(
