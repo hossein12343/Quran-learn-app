@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:html' as html;
 import 'package:flutter/foundation.dart';
+import '../app_log.dart';
 import '../audio.dart';
 import '../settings.dart';
 
@@ -13,6 +14,19 @@ RecitationPlayer makePlayer() => WebAudioPlayer();
 class WebAudioPlayer implements RecitationPlayer {
   final html.AudioElement _el = html.AudioElement()..preload = 'auto';
   final ValueNotifier<bool> _playing = ValueNotifier<bool>(false);
+
+  /// Bumped on every `play()` call, and checked after every `await` inside
+  /// it, so a call superseded by a newer one (the user tapped play again,
+  /// or the quiz auto-advanced to the next ayah, before the first clip
+  /// actually started) quietly gives up instead of fighting the newer
+  /// call for the shared `<audio>` element or logging a spurious error.
+  /// Without this, changing `_el.src` mid-flight reliably throws
+  /// `AbortError` from the *first* call's `.play()` — on mobile browsers
+  /// in particular, this is the single most common reason "the sound
+  /// doesn't work" even though playback itself is fine: a teach step's
+  /// auto-play race with the mascot/UI settling, or a double-tap on the
+  /// play button, aborted the very first attempt and nothing retried it.
+  int _playToken = 0;
 
   WebAudioPlayer() {
     _el.onPlay.listen((_) => _playing.value = true);
@@ -33,6 +47,7 @@ class WebAudioPlayer implements RecitationPlayer {
     required String qariId,
     double speed = 1.0,
   }) async {
+    final token = ++_playToken;
     final qari =
         knownQaris.firstWhere((q) => q.id == qariId, orElse: () => knownQaris.first);
     final url =
@@ -53,13 +68,30 @@ class WebAudioPlayer implements RecitationPlayer {
       // currentTime before the browser knows the clip's duration is
       // unreliable across browsers).
       unawaited(_el.onLoadedMetadata.first.then((_) {
-        _el.currentTime = skip;
+        if (token == _playToken) _el.currentTime = skip;
       }));
     }
     try {
       await _el.play();
     } on Object catch (e) {
-      debugPrint('audio: could not play $url ($e)');
+      if (token != _playToken) {
+        // Superseded by a newer play() while this one was still starting
+        // — expected, not a real failure. Silent on purpose.
+        return;
+      }
+      // A genuine failure (blocked by the browser's autoplay policy,
+      // network error, unsupported format, ...). This used to be a bare
+      // debugPrint, invisible outside a locally-attached DevTools console
+      // — exactly the case where "it just doesn't make a sound" would
+      // never surface without one. AppLog.warn is still local-only for
+      // now (see app_log.dart), but this is the seam a rate-limited Edge
+      // Function should hang off of if remote diagnostics come back.
+      AppLog.warn('Recitation playback failed', error: e, context: {
+        'surah': surah,
+        'ayah': ayah,
+        'qari': qariId,
+        'url': url,
+      });
     }
   }
 
