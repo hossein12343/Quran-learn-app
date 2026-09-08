@@ -205,7 +205,10 @@ class AppState extends ChangeNotifier {
       try {
         _applySnapshot(jsonDecode(raw) as Map<String, dynamic>);
         _reconcileStreakIfBroken();
-        signedIn = true;
+        // Snapshots contain only non-sensitive local learning state. They
+        // are never proof of identity, so restoring one must not authenticate
+        // the device or unlock account-only screens.
+        signedIn = false;
       } on Object {
         // Corrupt local snapshot — ignore and fall through to login.
       }
@@ -233,24 +236,12 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// [password] is optional so widget tests / callers that only want the
-  /// local-only behaviour of the original build can still use this. This
-  /// is regular sign-in only — account *creation* goes through
-  /// [beginSignup]/[confirmSignup] instead, since it needs the emailed
-  /// code.
-  void signIn(String name, String mail, {String? password, String? captchaToken}) {
-    displayName = name.trim().isEmpty ? 'دانش‌آموز' : name.trim();
-    email = mail.trim();
-    signedIn = true;
-    notifyListeners();
-    _persistSnapshot();
-
-    if (password != null && password.isNotEmpty) {
-      unawaited(_syncAuth(email, password, captchaToken));
-    }
-  }
-
-  Future<void> _syncAuth(String mail, String password, String? captchaToken) async {
+  /// Signs in only after Supabase has authenticated the credentials.
+  ///
+  /// There is intentionally no offline login: treating a failed request as
+  /// a successful login is an authentication bypass.
+  Future<void> signIn(String mail, String password,
+      {String? captchaToken}) async {
     syncing = true;
     syncNotice = null;
     notifyListeners();
@@ -265,14 +256,12 @@ class AppState extends ChangeNotifier {
       await _pullSurahProgress();
       await _pullBookmarks();
       syncNotice = null;
-    } on NetException catch (e) {
-      syncNotice =
-          'کار به‌صورت آفلاین — پیشرفت روی این دستگاه ذخیره می‌شود و پس از '
-          'در دسترس بودن سرور همگام‌سازی خواهد شد.';
-      AppLog.warn('Auth sync failed', error: e);
+      signedIn = true;
+      _persistSnapshot();
+    } finally {
+      syncing = false;
+      notifyListeners();
     }
-    syncing = false;
-    notifyListeners();
   }
 
   /// Common tail of every path that ends with a fresh [AuthSession]:
@@ -646,9 +635,9 @@ class AppState extends ChangeNotifier {
       'reviewDue': reviewDue.map((k, v) => MapEntry('$k', v.toIso8601String())),
       'reviewCleanRecalls': reviewCleanRecalls.map((k, v) => MapEntry('$k', v)),
       'bookmarks': bookmarks,
-      'userId': _userId,
-      'authToken': _authToken,
-      'refreshToken': _refreshToken,
+      // Never persist bearer credentials. Web localStorage and the desktop
+      // JSON store are not credential vaults; persistence turns an XSS or
+      // local-file exposure into a long-lived account takeover.
     };
     LocalStore.set('session', jsonEncode(snap));
   }
@@ -706,9 +695,10 @@ class AppState extends ChangeNotifier {
         ..clear()
         ..addAll(bookmarksRaw.map((k, v) => MapEntry(k, v as String?)));
     }
-    _userId = snap['userId'] as String?;
-    _authToken = snap['authToken'] as String?;
-    _refreshToken = snap['refreshToken'] as String?;
+    // Deliberately do not restore credentials from disk/browser storage.
+    _userId = null;
+    _authToken = null;
+    _refreshToken = null;
   }
 }
 

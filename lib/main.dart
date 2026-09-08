@@ -183,7 +183,16 @@ class QuranLearnApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
-      animation: appState,
+      // Merged with `settings` too, not just `appState` — the language
+      // toggle (now reachable pre-sign-in, see `LanguageToggle`) flips
+      // `settings.language`/`settings.direction`, and this is the one
+      // place that needs to hear about it: rebuilding here re-evaluates
+      // the `Directionality` below on every frame that matters, which
+      // Flutter then propagates to every descendant page (including ones,
+      // like the login/signup screens, that never listen to `settings`
+      // themselves) as a normal rebuild-from-an-ancestor, no per-screen
+      // wiring required.
+      animation: Listenable.merge([appState, settings]),
       builder: (context, _) {
         return MaterialApp(
           title: 'یادگیری قرآن',
@@ -192,13 +201,13 @@ class QuranLearnApp extends StatelessWidget {
           darkTheme: AppTheme.dark(),
           themeMode: appState.darkMode ? ThemeMode.dark : ThemeMode.light,
           navigatorObservers: [_routeLogger],
-          // The app defaults to Persian UI text now — wrapping everything
-          // in RTL directionality once here, rather than per-screen, is
-          // what actually makes the whole chrome (nav bar order, text
-          // alignment, icon positions) read right-to-left instead of just
-          // the Persian text itself sitting oddly inside an LTR layout.
+          // Follows `settings.language` now rather than always forcing
+          // RTL — Persian (the default) is still RTL, but picking English
+          // now actually flips the whole app's chrome (nav order, text
+          // alignment, icon positions), not just the Settings page (the
+          // only screen that used to override this itself).
           builder: (context, child) => Directionality(
-            textDirection: TextDirection.rtl,
+            textDirection: settings.direction,
             child: child!,
           ),
           initialRoute: '/splash',

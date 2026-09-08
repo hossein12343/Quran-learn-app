@@ -3,6 +3,7 @@ import '../../core/motion/motion.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/captcha_widget.dart';
 import '../../core/widgets/duo_button.dart';
+import '../../core/widgets/language_toggle.dart';
 import '../../shared/services/app_state.dart';
 import '../../shared/services/captcha.dart';
 import '../../shared/services/net/net.dart';
@@ -182,6 +183,7 @@ class _LoginPageState extends State<LoginPage> {
   final _password = TextEditingController();
   String? _error;
   String? _captchaToken;
+  bool _busy = false;
 
   @override
   void dispose() {
@@ -190,7 +192,7 @@ class _LoginPageState extends State<LoginPage> {
     super.dispose();
   }
 
-  void _submit() {
+  Future<void> _submit() async {
     if (!_email.text.contains('@')) {
       setState(() => _error = '\u0627\u06cc\u0646 \u0634\u0628\u06cc\u0647 \u06cc\u06a9 \u0622\u062f\u0631\u0633 \u0627\u06cc\u0645\u06cc\u0644 \u0646\u06cc\u0633\u062a.');
       return;
@@ -199,18 +201,25 @@ class _LoginPageState extends State<LoginPage> {
       setState(() => _error = '\u0631\u0645\u0632 \u0639\u0628\u0648\u0631 \u0628\u0627\u06cc\u062f \u062d\u062f\u0627\u0642\u0644 \u06f8 \u06a9\u0627\u0631\u0627\u06a9\u062a\u0631 \u0628\u0627\u0634\u062f.');
       return;
     }
-    final name = _email.text.split('@').first;
-    // Not gated on `_captchaToken` being non-null \u2014 login already
-    // "succeeds locally first" regardless of network state (see the
-    // class doc comment at the top of this file), and a missing token
-    // just means the background sync will fail the same way a bad
-    // password would, surfaced the same offline-friendly way. Requiring
-    // it here would break that established offline-first contract for
-    // no real security gain (Supabase only starts enforcing this once
-    // CAPTCHA protection is turned on server-side \u2014 see `captcha.dart`).
-    appState.signIn(name, _email.text,
-        password: _password.text, captchaToken: _captchaToken);
-    Navigator.of(context).pushReplacementNamed('/home');
+    if (_captchaToken == null) {
+      setState(() => _error = 'لطفاً تأیید امنیتی زیر را کامل کنید.');
+      return;
+    }
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      await appState.signIn(_email.text.trim(), _password.text,
+          captchaToken: _captchaToken);
+      if (!mounted) return;
+      Navigator.of(context).pushReplacementNamed('/home');
+    } on NetException catch (e) {
+      if (!mounted) return;
+      setState(() => _error = e.message);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   @override
@@ -222,7 +231,15 @@ class _LoginPageState extends State<LoginPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const SizedBox(height: AppSpacing.xxl),
+              // Reachable before signing in on purpose — this used to live
+              // only inside Settings, which meant a visitor stuck on an
+              // English-only or Persian-only device had no way to read
+              // this very screen in a language they understood.
+              const Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [LanguageToggle()],
+              ),
+              const SizedBox(height: AppSpacing.lg),
               Reveal(index: 0, child: const Center(child: Wordmark())),
               const SizedBox(height: AppSpacing.xl),
               Reveal(
@@ -282,7 +299,7 @@ class _LoginPageState extends State<LoginPage> {
                 ),
               ),
               const SizedBox(height: AppSpacing.xl),
-              Reveal(index: 4, child: BigButton(label: '\u0648\u0631\u0648\u062f', onTap: _submit)),
+              Reveal(index: 4, child: BigButton(label: _busy ? 'در حال ورود…' : 'ورود', onTap: _busy ? null : _submit)),
               const SizedBox(height: AppSpacing.lg),
               Reveal(
                 index: 5,
@@ -394,7 +411,14 @@ class _SignupPageState extends State<SignupPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(),
+      // Reachable before signing in on purpose, same reasoning as the
+      // login screen's own toggle — see LoginPage.build.
+      appBar: AppBar(actions: const [
+        Padding(
+          padding: EdgeInsets.only(left: AppSpacing.md),
+          child: Center(child: LanguageToggle()),
+        ),
+      ]),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(AppSpacing.xl),

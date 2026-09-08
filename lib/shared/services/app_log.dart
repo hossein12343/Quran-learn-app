@@ -1,19 +1,14 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
-import 'backend.dart';
 
 enum LogLevel { info, warn, error }
 
-/// Fire-and-forget logging to the `logs` table in the app's Supabase
-/// project (public insert, no read access — see the migration in
-/// backend/README.md's schema section).
+/// Local, best-effort diagnostic logging.
 ///
-/// This must never be able to break the app: every send is best-effort,
-/// swallows its own failures, and never throws back into the caller —
-/// logging a problem is not allowed to cause a second one. It also always
-/// prints locally first, so nothing is lost to a network hiccup while you
-/// have the console open.
+/// The app does not POST raw exception details from an unauthenticated
+/// browser client. Logging must never be able to break the app, so it is
+/// printed locally and intentionally never throws into the caller.
 abstract class AppLog {
   /// Set by main.dart once a route is known, so entries carry roughly
   /// where in the app they happened without every call site passing it.
@@ -52,21 +47,12 @@ abstract class AppLog {
     StackTrace? stack,
     Map<String, dynamic>? context,
   ) async {
-    try {
-      await Backend.insertLog({
-        'level': level.name,
-        'message': message.length > 2000 ? message.substring(0, 2000) : message,
-        'error': error?.toString() ?? '',
-        'stack': _trim(stack?.toString()),
-        'context': safeContext(context ?? <String, dynamic>{}),
-        'platform': kIsWeb ? 'web' : 'desktop',
-        'route': currentRoute,
-      });
-    } on Object {
-      // No backend reachable — this entry is lost. Acceptable trade-off
-      // for "never blocks or crashes the app"; see BACKEND.md if a local
-      // durable queue is ever worth adding.
-    }
+    // Do not send raw exception data from a public client to a writable
+    // database table. It can contain implementation details and makes the
+    // endpoint a trivial telemetry-spam target. Keep diagnostics local until
+    // a rate-limited, authenticated Edge Function is introduced.
+    _trim(stack?.toString());
+    safeContext(context ?? <String, dynamic>{});
   }
 
   static String _trim(String? s) {

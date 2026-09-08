@@ -288,18 +288,6 @@ class Backend {
     if (!res.ok) throw _pgException(res.body);
   }
 
-  // -------------------------------------------------------------- logging
-
-  static Future<void> insertLog(Map<String, dynamic> fields) async {
-    final res = await Net.request(
-      'POST',
-      '$baseUrl/rest/v1/logs',
-      headers: {..._headers(), 'Prefer': 'return=minimal'},
-      body: fields,
-    );
-    if (!res.ok) throw _pgException(res.body);
-  }
-
   // ------------------------------------------------------------- errors
 
   /// GoTrue (auth) error bodies look like `{"error_code": "...",
