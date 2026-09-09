@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/motion/motion.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/widgets/confetti.dart';
 import '../../core/widgets/duo_button.dart';
 import '../../core/widgets/mascot.dart';
 import '../../core/widgets/pattern_overlay.dart';
@@ -74,8 +75,32 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
+  bool _celebratingMilestone = false;
+
+  /// Fires at most once per newly-reached milestone (see
+  /// `AppState.pendingStreakMilestone`) — `build` re-runs on every
+  /// `appState` change (a whole quiz session's worth of XP/streak
+  /// updates, not just this one), so the `_celebratingMilestone` guard is
+  /// what keeps a single crossed milestone from queuing a dialog on every
+  /// one of those rebuilds while the first one is still open.
+  void _maybeCelebrateStreak() {
+    final milestone = appState.pendingStreakMilestone;
+    if (milestone == null || _celebratingMilestone) return;
+    _celebratingMilestone = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (context) => _StreakMilestoneDialog(days: milestone),
+      );
+      appState.acknowledgeStreakMilestone(milestone);
+      _celebratingMilestone = false;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
+    _maybeCelebrateStreak();
     final next = appState.nextSurah;
     return Scaffold(
       body: SafeArea(
@@ -470,6 +495,61 @@ class _HomePageState extends State<HomePage> {
         border: Border.all(color: context.borderColor, width: 2),
       ),
       child: child,
+    );
+  }
+}
+
+/// A full, one-time celebration for reaching a round streak number
+/// (`AppState.streakMilestones`) — the "bigger celebration moments" the
+/// regular right/wrong tones and small mascot never covered. Reuses
+/// `Confetti`, otherwise reserved for sealing a level/surah, since a
+/// streak milestone is exactly that kind of rare, meaningful moment.
+class _StreakMilestoneDialog extends StatelessWidget {
+  final int days;
+  const _StreakMilestoneDialog({required this.days});
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.all(AppSpacing.xl),
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          const Positioned.fill(child: Confetti(play: true)),
+          Container(
+            padding: const EdgeInsets.all(AppSpacing.xl),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surface,
+              borderRadius: BorderRadius.circular(AppRadius.xl),
+              boxShadow: AppShadows.hero,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.local_fire_department_rounded,
+                    size: 56, color: AppColors.streakFire),
+                const SizedBox(height: AppSpacing.md),
+                Text('$days روز پشت‌سرهم!',
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.headlineMedium),
+                const SizedBox(height: AppSpacing.sm),
+                Text(
+                  'همینطور ادامه بده — این روند نتیجهٔ تلاش واقعی توست.',
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+                const SizedBox(height: AppSpacing.xl),
+                DuoButton(
+                  label: 'ادامه',
+                  fullWidth: false,
+                  onTap: () => Navigator.of(context).pop(),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

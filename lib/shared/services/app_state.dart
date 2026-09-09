@@ -30,6 +30,31 @@ class AppState extends ChangeNotifier {
   int currentStreak = 0;
   int longestStreak = 0;
 
+  /// The highest streak-milestone celebration already shown on this
+  /// device — see [pendingStreakMilestone]. Deliberately local-only
+  /// (not synced to Supabase): losing it on a new device just means a
+  /// milestone might celebrate once more there, which is harmless, and
+  /// not worth a schema change for.
+  int lastCelebratedStreakMilestone = 0;
+
+  static const List<int> streakMilestones = <int>[3, 7, 14, 30, 50, 100, 200, 365];
+
+  /// The highest not-yet-celebrated milestone [currentStreak] has reached,
+  /// or null if there isn't one. Home shows a one-time celebration for
+  /// this, then calls [acknowledgeStreakMilestone].
+  int? get pendingStreakMilestone {
+    for (final m in streakMilestones.reversed) {
+      if (currentStreak >= m && lastCelebratedStreakMilestone < m) return m;
+    }
+    return null;
+  }
+
+  void acknowledgeStreakMilestone(int milestone) {
+    if (milestone <= lastCelebratedStreakMilestone) return;
+    lastCelebratedStreakMilestone = milestone;
+    _persistSnapshot();
+  }
+
   /// 'yyyy-MM-dd' of the last calendar day a session was recorded — the
   /// only thing that actually drives [currentStreak]. Login/app-open does
   /// not touch it; only [recordSession] does.
@@ -73,24 +98,30 @@ class AppState extends ChangeNotifier {
       _parseYmd(b).difference(_parseYmd(a)).inDays;
 
   /// The only place [currentStreak] changes upward. A session today after
-  /// one yesterday extends it; a session today after a gap of 2+ days (or
-  /// no prior session at all) restarts it at 1; a second session on the
-  /// same day is a no-op.
+  /// one yesterday extends it; a second session on the same day is a
+  /// no-op. A session today after a gap of 2+ days normally restarts the
+  /// streak at 1 — Pro's streak freeze (see `plan.dart`) is exactly that
+  /// one behaviour switched off: the gap is forgiven and the streak just
+  /// continues instead. Still requires an actual session *today* — freeze
+  /// protects days you skipped, not the need to show up at all.
   void _touchStreakForToday() {
     final today = _todayKey();
     if (lastActiveDate == today) return;
-    currentStreak = lastActiveDate != null &&
-            _daysBetween(lastActiveDate!, today) == 1
-        ? currentStreak + 1
-        : 1;
+    final consecutive =
+        lastActiveDate != null && _daysBetween(lastActiveDate!, today) == 1;
+    final protectedByFreeze = isPro && lastActiveDate != null && !consecutive;
+    currentStreak = (consecutive || protectedByFreeze) ? currentStreak + 1 : 1;
     lastActiveDate = today;
     if (currentStreak > longestStreak) longestStreak = currentStreak;
   }
 
   /// Call after loading state from anywhere (local disk or the server) so
   /// a streak that was already broken by the calendar shows as broken
-  /// immediately, rather than sitting stale until the next session.
+  /// immediately, rather than sitting stale until the next session. Pro
+  /// accounts never have their streak zeroed by a calendar gap here —
+  /// same streak-freeze exception as `_touchStreakForToday`.
   void _reconcileStreakIfBroken() {
+    if (isPro) return;
     final last = lastActiveDate;
     if (last == null) return;
     if (_daysBetween(last, _todayKey()) > 1) currentStreak = 0;
@@ -683,6 +714,7 @@ class AppState extends ChangeNotifier {
       // actual source of truth) overwrites this on every successful
       // sync, so a locally-edited copy never outlives the next sign-in.
       'isPro': isPro,
+      'lastCelebratedStreakMilestone': lastCelebratedStreakMilestone,
       // Never persist bearer credentials. Web localStorage and the desktop
       // JSON store are not credential vaults; persistence turns an XSS or
       // local-file exposure into a long-lived account takeover.
@@ -704,6 +736,9 @@ class AppState extends ChangeNotifier {
     quizzesTaken = (snap['quizzesTaken'] as num?)?.toInt() ?? quizzesTaken;
     quizzesPassed = (snap['quizzesPassed'] as num?)?.toInt() ?? quizzesPassed;
     isPro = snap['isPro'] as bool? ?? isPro;
+    lastCelebratedStreakMilestone =
+        (snap['lastCelebratedStreakMilestone'] as num?)?.toInt() ??
+            lastCelebratedStreakMilestone;
 
     final heldRaw = snap['held'] as Map<String, dynamic>?;
     if (heldRaw != null) {
