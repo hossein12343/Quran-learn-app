@@ -113,4 +113,52 @@ class WebAudioPlayer implements RecitationPlayer {
   Future<void> setSpeed(double speed) async {
     _el.playbackRate = speed;
   }
+
+  bool _warmupHooked = false;
+
+  @override
+  void warmUp() {
+    // Same shape as `sfx.warmUp()`: called once from `main()`, long before
+    // any real interaction, so it only *registers* for the first genuine
+    // gesture anywhere in the app — capturing, so it fires before that
+    // gesture is spent on whatever widget it actually landed on.
+    if (_warmupHooked) return;
+    _warmupHooked = true;
+    void onFirstGesture(html.Event _) {
+      html.document.removeEventListener('pointerdown', onFirstGesture, true);
+      html.document.removeEventListener('keydown', onFirstGesture, true);
+      html.document.removeEventListener('touchstart', onFirstGesture, true);
+      // The standard "silent unlock" trick: play a near-zero-length
+      // silent clip (a 1-sample WAV, inlined as a data: URI so there's no
+      // network round trip to race the gesture against) synchronously
+      // inside this real gesture, then immediately stop and clear it. On
+      // browsers that gate media playback behind user activation (mobile
+      // Safari above all), this unlocks *every later* `.play()` call on
+      // this element for the rest of the page's lifetime — including
+      // ones triggered programmatically, like a teach step auto-playing
+      // right after `QuizPage` finishes pushing onto the Navigator, which
+      // is otherwise too far removed from the tap that started it to
+      // count as a user gesture on its own.
+      try {
+        _el.src =
+            'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=';
+        final playFuture = _el.play();
+        // A rejected promise here (still possible) shouldn't surface as
+        // an app error — this is a best-effort unlock, and a genuine
+        // playback failure later still goes through `play()`'s own
+        // AppLog.warn.
+        unawaited(playFuture.catchError((_) {}).whenComplete(() {
+          _el.pause();
+          _el.currentTime = 0;
+          _el.removeAttribute('src');
+        }));
+      } on Object {
+        // Nothing sensible to do with a synchronous failure here either.
+      }
+    }
+
+    html.document.addEventListener('pointerdown', onFirstGesture, true);
+    html.document.addEventListener('keydown', onFirstGesture, true);
+    html.document.addEventListener('touchstart', onFirstGesture, true);
+  }
 }

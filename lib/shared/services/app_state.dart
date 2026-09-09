@@ -228,10 +228,8 @@ class AppState extends ChangeNotifier {
     if (refreshToken == null) return;
     try {
       final session = await Backend.refresh(refreshToken);
-      await _adoptSession(session);
-      _reconcileStreakIfBroken();
-      await _pullSurahProgress();
-      await _pullBookmarks();
+      _adoptSession(session);
+      unawaited(_finishSigningIn());
       syncNotice = null;
     } on NetException catch (e) {
       syncNotice = 'آفلاین — نمایش آنچه روی این دستگاه ذخیره شده است.';
@@ -243,7 +241,13 @@ class AppState extends ChangeNotifier {
   /// Signs in only after Supabase has authenticated the credentials.
   ///
   /// There is intentionally no offline login: treating a failed request as
-  /// a successful login is an authentication bypass.
+  /// a successful login is an authentication bypass. That check is the
+  /// single `await Backend.signIn(...)` below — once it returns, Supabase
+  /// has already verified the password, so `_adoptSession` marks the
+  /// account signed in immediately rather than making the caller sit
+  /// through the profile/progress/bookmarks fetch too (see
+  /// `_finishSigningIn`'s doc comment for why that used to take several
+  /// seconds).
   Future<void> signIn(String mail, String password,
       {String? captchaToken}) async {
     syncing = true;
@@ -255,29 +259,57 @@ class AppState extends ChangeNotifier {
         password: password,
         captchaToken: captchaToken,
       );
-      await _adoptSession(session);
-      _reconcileStreakIfBroken();
-      await _pullSurahProgress();
-      await _pullBookmarks();
-      syncNotice = null;
-      signedIn = true;
-      _persistSnapshot();
+      _adoptSession(session);
     } finally {
       syncing = false;
       notifyListeners();
     }
+    unawaited(_finishSigningIn());
   }
 
-  /// Common tail of every path that ends with a fresh [AuthSession]:
-  /// stores the tokens, pulls the profile row Supabase's `handle_new_user`
-  /// trigger guarantees exists, and applies it.
-  Future<void> _adoptSession(AuthSession session) async {
+  /// Stores the tokens from a fresh, already-verified [AuthSession] and
+  /// marks the account signed in — synchronous on purpose. Supabase
+  /// verifying the credentials (whatever produced this [AuthSession]) is
+  /// the actual security check; nothing after that needs to finish before
+  /// the UI can move on.
+  void _adoptSession(AuthSession session) {
     _authToken = session.accessToken;
     _refreshToken = session.refreshToken;
     _userId = session.userId;
     if (session.email.isNotEmpty) email = session.email;
-    final profile = await Backend.getProfile(session.accessToken, session.userId);
-    _applyRemoteProfile(profile);
+    signedIn = true;
+    _persistSnapshot();
+  }
+
+  /// The slower half of signing in — the profile row, surah progress, and
+  /// bookmarks — split out from `_adoptSession` so every sign-in path
+  /// (password, Google, email confirmation) can navigate the user in
+  /// immediately and let this finish in the background instead. Before
+  /// this split, each path serially awaited a profile fetch plus two more
+  /// pulls — up to four network round trips back to back — before
+  /// `signedIn` ever became true, which is what made sign-in (Google's
+  /// redirect landing back here especially) take several real seconds
+  /// instead of feeling instant. None of that data is proof of identity,
+  /// so none of it needs to block navigation the way the actual
+  /// credential check does.
+  Future<void> _finishSigningIn() async {
+    final token = _authToken;
+    final userId = _userId;
+    if (token == null || userId == null) return;
+    try {
+      final profile = await Backend.getProfile(token, userId);
+      _applyRemoteProfile(profile);
+      _reconcileStreakIfBroken();
+      await _pullSurahProgress();
+      await _pullBookmarks();
+      syncNotice = null;
+    } on NetException catch (e) {
+      syncNotice =
+          'برخی اطلاعات هنوز همگام نشده — کمی بعد دوباره امتحان کنید.';
+      AppLog.warn('Post-signin sync failed', error: e);
+    }
+    notifyListeners();
+    _persistSnapshot();
   }
 
   // ------------------------------------------------- email-verified signup
@@ -327,10 +359,9 @@ class AppState extends ChangeNotifier {
     }
     final session = await Backend.confirmSignup(pending, code);
     _pendingEmail = null;
-    await _adoptSession(session);
-    signedIn = true;
+    _adoptSession(session);
     notifyListeners();
-    _persistSnapshot();
+    unawaited(_finishSigningIn());
   }
 
   // -------------------------------------------------------- Google sign-in
@@ -364,25 +395,33 @@ class AppState extends ChangeNotifier {
     }
     try {
       // The fragment carries the tokens directly but not the user id/email
-      // — refreshing immediately gets us those plus a clean, verified pair.
+      // — refreshing immediately gets us those plus a clean, verified
+      // pair, and is the *only* network call this needs to wait on:
+      // Supabase already verified the OAuth exchange to produce the
+      // fragment in the first place, so once this refresh confirms it,
+      // there's real proof of identity and nothing left to block on
+      // before SplashPage navigates home. This one call used to be
+      // followed by three more, serially — a profile fetch plus two
+      // pulls — which is what made "sign in with Google" take several
+      // real seconds. See `_finishSigningIn`.
       final session = await Backend.refresh(refreshTokenValue);
-      await _adoptSession(session);
-      // The `handle_new_user` trigger only knows about `display_name`
-      // (what password signup sends) — Google's own name lands in
-      // metadata under a different key, so pull it in here and persist it
-      // as this account's real display name.
-      final googleName = (session.metadata['full_name'] ??
-              session.metadata['name']) as String?;
-      if (googleName != null && googleName.isNotEmpty) {
-        displayName = googleName;
-        _pushProfileFields({'display_name': googleName});
-      }
-      _reconcileStreakIfBroken();
-      signedIn = true;
-      await _pullSurahProgress();
-      await _pullBookmarks();
+      _adoptSession(session);
       notifyListeners();
-      _persistSnapshot();
+      unawaited(_finishSigningIn().then((_) {
+        // The `handle_new_user` trigger only knows about `display_name`
+        // (what password signup sends) — Google's own name lands in
+        // metadata under a different key. Applied after the background
+        // sync rather than gating navigation on it; whichever name was
+        // already on the profile shows first and this corrects it a
+        // moment later, same as `_finishSigningIn`'s own fields do.
+        final googleName = (session.metadata['full_name'] ??
+                session.metadata['name']) as String?;
+        if (googleName != null && googleName.isNotEmpty) {
+          displayName = googleName;
+          _pushProfileFields({'display_name': googleName});
+          notifyListeners();
+        }
+      }));
       return true;
     } on NetException catch (e) {
       AppLog.error('Google sign-in failed to complete', error: e);

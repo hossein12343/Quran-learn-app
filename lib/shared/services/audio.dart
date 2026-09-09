@@ -25,6 +25,16 @@ abstract class RecitationPlayer {
 
   /// Emits true while a clip is playing.
   ValueListenable<bool> get isPlaying;
+
+  /// Unlocks the underlying `<audio>` element for the rest of the page's
+  /// lifetime. Mobile Safari in particular refuses to play *any* media —
+  /// not just the first attempt — unless a `.play()` call happens
+  /// synchronously inside a real user gesture at least once; a session's
+  /// very first recitation is triggered from `QuizPage.initState`
+  /// (reached after a route push settles, not inside the tap that started
+  /// it), which misses that window. No-op off-web. Call once, from a real
+  /// early user gesture — see `main.dart`, same pattern as `sfx.warmUp()`.
+  void warmUp();
 }
 
 class SilentPlayer implements RecitationPlayer {
@@ -52,6 +62,9 @@ class SilentPlayer implements RecitationPlayer {
 
   @override
   Future<void> setSpeed(double speed) async {}
+
+  @override
+  void warmUp() {}
 }
 
 /// Real playback on web (via the browser's own `<audio>` element — no

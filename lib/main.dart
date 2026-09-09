@@ -136,6 +136,7 @@ void main() {
   if (kIsWeb) usePathUrlStrategy();
   AppLog.captureUncaught();
   recitation = createRecitationPlayer();
+  recitation.warmUp();
   sfx = createSoundEffects();
   sfx.warmUp();
   reminders = createReminderService();
