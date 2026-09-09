@@ -6,6 +6,7 @@ import '../../shared/services/audio.dart';
 import '../../shared/services/recite_check.dart';
 import '../../shared/services/reminders.dart';
 import '../../shared/services/settings.dart';
+import '../profile/pro_page.dart';
 
 class SettingsPage extends StatelessWidget {
   const SettingsPage({super.key});
@@ -81,7 +82,13 @@ class SettingsPage extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.only(bottom: AppSpacing.sm),
               child: Pressable(
-                onTap: () => settings.setQari(q.id),
+                // Locked reciters open the Pro upsell instead of selecting
+                // — see plan.dart. This is the only place `qariId` is ever
+                // set, so it's also the only gate real playback needs.
+                onTap: (q.isPro && !appState.isPro)
+                    ? () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(builder: (_) => const ProPage()))
+                    : () => settings.setQari(q.id),
                 child: Container(
                   padding: const EdgeInsets.all(AppSpacing.md),
                   decoration: BoxDecoration(
@@ -97,6 +104,11 @@ class SettingsPage extends StatelessWidget {
                   ),
                   child: Row(
                     children: [
+                      if (q.isPro && !appState.isPro) ...[
+                        Icon(Icons.lock_rounded,
+                            size: 18, color: AppColors.gold),
+                        const SizedBox(width: AppSpacing.sm),
+                      ],
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,

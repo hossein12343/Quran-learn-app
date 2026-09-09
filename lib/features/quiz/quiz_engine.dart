@@ -93,11 +93,19 @@ class Session {
   /// whole surah.
   final bool singleLevel;
 
+  /// Pro perk (see `shared/services/plan.dart`): a mistake still adds a
+  /// shake/wrong-tone and resets the ayah's own progress exactly as
+  /// before — only the "run out of hearts and fail the level" consequence
+  /// is switched off. [hearts] still ticks down for display, it simply
+  /// never reaches [stage] `Stage.failed`.
+  final bool unlimitedHearts;
+
   Session(
     this.surah, {
     Set<int> alreadyHeld = const <int>{},
     int? startChunk,
     this.singleLevel = false,
+    this.unlimitedHearts = false,
   })  : items = List<MemoryItem>.generate(surah.ayat.length, (i) {
           final item = MemoryItem(i);
           if (alreadyHeld.contains(i) || isKnownIntro(surah, i)) {
@@ -383,6 +391,12 @@ class Session {
   }
 
   void _loseHeart() {
+    // Pro: the shake/wrong-tone feedback on the exercise itself already
+    // happened by the time this is called (see `submit`) — only the
+    // "run out and fail the level" consequence is skipped, so `hearts`
+    // deliberately never moves and stays a plain, full [kHearts] for
+    // display.
+    if (unlimitedHearts) return;
     hearts--;
     if (hearts <= 0) {
       hearts = 0;

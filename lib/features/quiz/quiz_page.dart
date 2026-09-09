@@ -108,6 +108,7 @@ class _QuizPageState extends State<QuizPage> {
       alreadyHeld: appState.heldIndices(widget.surah.number),
       startChunk: widget.chunkIndex,
       singleLevel: true,
+      unlimitedHearts: appState.isPro,
     );
     if (widget.chunkIndex == 0 && Session.isKnownIntro(widget.surah, 0)) {
       // Played once as a courtesy, never taught or drilled — see
@@ -423,7 +424,10 @@ class _QuizPageState extends State<QuizPage> {
           Icon(Icons.favorite_rounded, size: 22, color: AppColors.red),
           const SizedBox(width: 4),
           Text(
-            '${_s.hearts}',
+            // Pro: hearts never actually drop (see Session._loseHeart), so
+            // showing the always-full number would read as "you happen to
+            // still have all your hearts" rather than "you can't run out."
+            _s.unlimitedHearts ? '∞' : '${_s.hearts}',
             style: const TextStyle(
               fontWeight: FontWeight.w800,
               color: AppColors.red,

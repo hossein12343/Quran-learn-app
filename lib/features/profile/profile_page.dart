@@ -7,6 +7,7 @@ import '../learn/memorized_page.dart';
 import '../progress/achievements_page.dart';
 import '../quran/bookmarks_page.dart';
 import '../settings/settings_page.dart';
+import 'pro_page.dart';
 
 class ProfilePage extends StatelessWidget {
   const ProfilePage({super.key});
@@ -97,6 +98,8 @@ class ProfilePage extends StatelessWidget {
               ),
             ),
           ),
+          const SizedBox(height: AppSpacing.xl),
+          Reveal(index: 1, child: _proBanner(context)),
           const SizedBox(height: AppSpacing.xl),
           Reveal(
             index: 1,
@@ -245,6 +248,73 @@ class ProfilePage extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _proBanner(BuildContext context) {
+    if (appState.isPro) {
+      return Pressable(
+        onTap: () => Navigator.of(context)
+            .push(MaterialPageRoute<void>(builder: (_) => const ProPage())),
+        child: Container(
+          padding: const EdgeInsets.all(AppSpacing.md),
+          decoration: BoxDecoration(
+            color: AppColors.goldLight,
+            borderRadius: BorderRadius.circular(AppRadius.lg),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.workspace_premium_rounded,
+                  size: 20, color: AppColors.goldDark),
+              const SizedBox(width: AppSpacing.sm),
+              Text('عضو Pro',
+                  style: Theme.of(context)
+                      .textTheme
+                      .titleSmall
+                      ?.copyWith(color: AppColors.goldDark)),
+              const Spacer(),
+              Icon(Icons.chevron_left_rounded, color: context.mutedColor),
+            ],
+          ),
+        ),
+      );
+    }
+    return Pressable(
+      onTap: () => Navigator.of(context)
+          .push(MaterialPageRoute<void>(builder: (_) => const ProPage())),
+      child: Container(
+        padding: const EdgeInsets.all(AppSpacing.lg),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [AppColors.gold, AppColors.goldDark],
+          ),
+          borderRadius: BorderRadius.circular(AppRadius.lg),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.workspace_premium_rounded,
+                color: AppColors.white),
+            const SizedBox(width: AppSpacing.md),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('ارتقا به Pro',
+                      style: TextStyle(
+                          color: AppColors.white,
+                          fontWeight: FontWeight.w800)),
+                  Text('قلب نامحدود، همهٔ قاریان و بیشتر',
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodySmall
+                          ?.copyWith(color: Colors.white70)),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_left_rounded, color: AppColors.white),
+          ],
+        ),
       ),
     );
   }

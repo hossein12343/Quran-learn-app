@@ -22,6 +22,10 @@ class AppState extends ChangeNotifier {
   bool signedIn = false;
   bool darkMode = false;
 
+  /// Mirrors `profiles.is_pro` — see `shared/services/plan.dart` for what
+  /// this actually gates and why it's not tied to a real payment yet.
+  bool isPro = false;
+
   int totalXp = 0;
   int currentStreak = 0;
   int longestStreak = 0;
@@ -611,6 +615,7 @@ class AppState extends ChangeNotifier {
     minutesToday = (record['minutes_today'] as num?)?.toInt() ?? minutesToday;
     final goal = record['learning_goal'] as String?;
     if (goal != null && goal.isNotEmpty) learningGoal = goal;
+    isPro = record['is_pro'] as bool? ?? isPro;
     _persistSnapshot();
   }
 
@@ -635,6 +640,10 @@ class AppState extends ChangeNotifier {
       'reviewDue': reviewDue.map((k, v) => MapEntry('$k', v.toIso8601String())),
       'reviewCleanRecalls': reviewCleanRecalls.map((k, v) => MapEntry('$k', v)),
       'bookmarks': bookmarks,
+      // Cached for offline display only — `_applyRemoteProfile` (the
+      // actual source of truth) overwrites this on every successful
+      // sync, so a locally-edited copy never outlives the next sign-in.
+      'isPro': isPro,
       // Never persist bearer credentials. Web localStorage and the desktop
       // JSON store are not credential vaults; persistence turns an XSS or
       // local-file exposure into a long-lived account takeover.
@@ -655,6 +664,7 @@ class AppState extends ChangeNotifier {
     learningGoal = snap['learningGoal'] as String? ?? learningGoal;
     quizzesTaken = (snap['quizzesTaken'] as num?)?.toInt() ?? quizzesTaken;
     quizzesPassed = (snap['quizzesPassed'] as num?)?.toInt() ?? quizzesPassed;
+    isPro = snap['isPro'] as bool? ?? isPro;
 
     final heldRaw = snap['held'] as Map<String, dynamic>?;
     if (heldRaw != null) {
