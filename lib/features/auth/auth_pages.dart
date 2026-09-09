@@ -159,6 +159,14 @@ class Wordmark extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // The source PNG is 512x512 (a real app-icon export); every call site
+    // here shows it at 84 logical px or smaller. Without a cache size,
+    // Flutter decodes the full 512x512 bitmap into memory every time this
+    // mounts — cheap once cached, but this is the very first thing painted
+    // on the splash/login/signup screens, so that decode sits directly on
+    // the cold-start path. Capped to 3x so it still renders crisp on a
+    // high-DPI phone screen.
+    final px = (size * 3).round();
     return Container(
       width: size,
       height: size,
@@ -166,7 +174,11 @@ class Wordmark extends StatelessWidget {
         borderRadius: BorderRadius.circular(size * (112 / 512)),
         boxShadow: AppShadows.hero,
       ),
-      child: Image.asset('assets/branding/app_logo.png'),
+      child: Image.asset(
+        'assets/branding/app_logo.png',
+        cacheWidth: px,
+        cacheHeight: px,
+      ),
     );
   }
 }

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart' show compute;
 import 'package:flutter/services.dart' show rootBundle;
 
 /// Qur'anic text reproduced verbatim from the standard Hafs mushaf — the
@@ -161,18 +162,30 @@ bool quranFullyLoaded = false;
 /// Replaces the 4-surah fallback above with all 114 surahs. Called once at
 /// startup (see splash_page.dart); safe to call again, and leaves the
 /// fallback in place if the asset can't be read for any reason.
+///
+/// The parse itself (`jsonDecode` plus building ~6,236 `Ayah` objects out
+/// of a 3MB string) runs via [compute] on a background isolate rather
+/// than inline here — measured on a mid-range Android device, that parse
+/// alone was long enough to visibly stall the splash screen's own
+/// animation, on top of whatever it delayed navigating away from. `raw`
+/// (already-decoded UTF-8 text) and the returned `List<Surah>` are plain
+/// data — Strings, ints, and Lists of those — which is exactly what
+/// `compute` can move across the isolate boundary without extra work.
 Future<void> loadFullQuran() async {
   if (quranFullyLoaded) return;
   try {
     final raw = await rootBundle.loadString('assets/quran_full.json');
-    final data = jsonDecode(raw) as Map<String, dynamic>;
-    final loaded = (data['surahs'] as List)
-        .map((s) => Surah.fromJson(s as Map<String, dynamic>))
-        .toList()
-      ..sort((a, b) => a.number.compareTo(b.number));
-    surahs = loaded;
+    surahs = await compute(_parseQuranSurahs, raw);
     quranFullyLoaded = true;
   } on Object {
     // Asset missing or malformed — keep the 4-surah fallback.
   }
+}
+
+List<Surah> _parseQuranSurahs(String raw) {
+  final data = jsonDecode(raw) as Map<String, dynamic>;
+  return (data['surahs'] as List)
+      .map((s) => Surah.fromJson(s as Map<String, dynamic>))
+      .toList()
+    ..sort((a, b) => a.number.compareTo(b.number));
 }

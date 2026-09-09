@@ -28,6 +28,15 @@ class MainShell extends StatefulWidget {
 class _MainShellState extends State<MainShell> {
   int _index = 0;
 
+  /// Every tab keeps its place in the `IndexedStack` once opened — that's
+  /// what actually preserves scroll position, matching the class doc
+  /// comment above — but a tab never opened this app-open is built as a
+  /// cheap placeholder instead of the real page. Without this, reaching
+  /// MainShell for the first time (every sign-in) built all six tabs —
+  /// Learn, Practice, Quran, Progress, and Profile included — before a
+  /// single frame ever showed anything but Home.
+  final Set<int> _opened = {0};
+
   static const _items = <_NavItem>[
     _NavItem(Icons.home_rounded, Icons.home_outlined, 'خانه'),
     _NavItem(Icons.school_rounded, Icons.school_outlined, 'یادگیری'),
@@ -46,12 +55,14 @@ class _MainShellState extends State<MainShell> {
           body: IndexedStack(
             index: _index,
             children: [
-              HomePage(onGoToLearn: () => setState(() => _index = 1)),
-              const LearnPage(),
-              const PracticePage(),
-              const QuranPage(),
-              const ProgressPage(),
-              const ProfilePage(),
+              _opened.contains(0)
+                  ? HomePage(onGoToLearn: () => _goTo(1))
+                  : const SizedBox.shrink(),
+              _opened.contains(1) ? const LearnPage() : const SizedBox.shrink(),
+              _opened.contains(2) ? const PracticePage() : const SizedBox.shrink(),
+              _opened.contains(3) ? const QuranPage() : const SizedBox.shrink(),
+              _opened.contains(4) ? const ProgressPage() : const SizedBox.shrink(),
+              _opened.contains(5) ? const ProfilePage() : const SizedBox.shrink(),
             ],
           ),
           bottomNavigationBar: Container(
@@ -76,12 +87,19 @@ class _MainShellState extends State<MainShell> {
     );
   }
 
+  void _goTo(int i) {
+    setState(() {
+      _index = i;
+      _opened.add(i);
+    });
+  }
+
   Widget _tab(int i, _NavItem item) {
     final on = _index == i;
     final color = on ? AppColors.primary : context.mutedColor;
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onTap: () => setState(() => _index = i),
+      onTap: () => _goTo(i),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
