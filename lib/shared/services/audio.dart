@@ -26,6 +26,11 @@ abstract class RecitationPlayer {
   /// Emits true while a clip is playing.
   ValueListenable<bool> get isPlaying;
 
+  /// Bumped once each time a clip plays through to its natural end — not
+  /// when playback is stopped or superseded by a newer `play()`. The Qur'an
+  /// reader's continuous / repeat playback advances off this.
+  ValueListenable<int> get clipEndCount;
+
   /// Unlocks the underlying `<audio>` element for the rest of the page's
   /// lifetime. Mobile Safari in particular refuses to play *any* media —
   /// not just the first attempt — unless a `.play()` call happens
@@ -39,12 +44,16 @@ abstract class RecitationPlayer {
 
 class SilentPlayer implements RecitationPlayer {
   final ValueNotifier<bool> _playing = ValueNotifier<bool>(false);
+  final ValueNotifier<int> _clipEnds = ValueNotifier<int>(0);
 
   @override
   bool get available => false;
 
   @override
   ValueListenable<bool> get isPlaying => _playing;
+
+  @override
+  ValueListenable<int> get clipEndCount => _clipEnds;
 
   @override
   Future<void> play({

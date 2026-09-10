@@ -14,6 +14,7 @@ RecitationPlayer makePlayer() => WebAudioPlayer();
 class WebAudioPlayer implements RecitationPlayer {
   final html.AudioElement _el = html.AudioElement()..preload = 'auto';
   final ValueNotifier<bool> _playing = ValueNotifier<bool>(false);
+  final ValueNotifier<int> _clipEnds = ValueNotifier<int>(0);
 
   /// Bumped on every `play()` call, and checked after every `await` inside
   /// it, so a call superseded by a newer one (the user tapped play again,
@@ -31,7 +32,10 @@ class WebAudioPlayer implements RecitationPlayer {
   WebAudioPlayer() {
     _el.onPlay.listen((_) => _playing.value = true);
     _el.onPause.listen((_) => _playing.value = false);
-    _el.onEnded.listen((_) => _playing.value = false);
+    _el.onEnded.listen((_) {
+      _playing.value = false;
+      _clipEnds.value++;
+    });
   }
 
   @override
@@ -39,6 +43,9 @@ class WebAudioPlayer implements RecitationPlayer {
 
   @override
   ValueListenable<bool> get isPlaying => _playing;
+
+  @override
+  ValueListenable<int> get clipEndCount => _clipEnds;
 
   @override
   Future<void> play({

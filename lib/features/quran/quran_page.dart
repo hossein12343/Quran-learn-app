@@ -139,110 +139,273 @@ class SurahReaderPage extends StatefulWidget {
 }
 
 class _SurahReaderPageState extends State<SurahReaderPage> {
-  int? _playingAyah;
+  final ScrollController _sc = ScrollController();
+  final Map<int, GlobalKey> _ayahKeys = {};
 
-  Future<void> _play(int ayahNumber) async {
-    setState(() => _playingAyah = ayahNumber);
-    await recitation.play(
+  /// The ayah currently sounding (or about to), or null when idle.
+  int? _current;
+
+  /// True while a continuous run is in progress — each ayah plays
+  /// [Settings.repeatCount] times, then playback rolls to the next ayah,
+  /// scrolling it into view, until the surah ends or the user stops.
+  bool _running = false;
+  int _playsThisAyah = 0;
+
+  GlobalKey _keyFor(int n) => _ayahKeys.putIfAbsent(n, GlobalKey.new);
+
+  @override
+  void initState() {
+    super.initState();
+    recitation.clipEndCount.addListener(_onClipEnd);
+  }
+
+  @override
+  void dispose() {
+    recitation.clipEndCount.removeListener(_onClipEnd);
+    recitation.stop();
+    _sc.dispose();
+    super.dispose();
+  }
+
+  void _startFrom(int ayahNumber) {
+    setState(() {
+      _running = true;
+      _current = ayahNumber;
+      _playsThisAyah = 0;
+    });
+    _playCurrent();
+  }
+
+  void _stop() {
+    recitation.stop();
+    setState(() {
+      _running = false;
+      _current = null;
+      _playsThisAyah = 0;
+    });
+  }
+
+  void _playCurrent() {
+    final n = _current;
+    if (n == null) return;
+    _playsThisAyah++;
+    recitation.play(
       surah: widget.surah.number,
-      ayah: ayahNumber,
+      ayah: n,
       qariId: settings.qariId,
       speed: settings.speed,
     );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final ctx = _keyFor(n).currentContext;
+      if (ctx != null && mounted) {
+        Scrollable.ensureVisible(ctx,
+            duration: const Duration(milliseconds: 320),
+            curve: Curves.easeOutCubic,
+            alignment: 0.15);
+      }
+    });
+  }
+
+  void _onClipEnd() {
+    if (!_running || _current == null) return;
+    // repeatCount 1..N are literal; the settings slider tops out at a
+    // finite value, so there's no "infinite" case to guard.
+    if (_playsThisAyah < settings.repeatCount) {
+      _playCurrent();
+      return;
+    }
+    final next = _current! + 1;
+    if (next > widget.surah.ayat.length) {
+      _stop();
+      return;
+    }
+    setState(() {
+      _current = next;
+      _playsThisAyah = 0;
+    });
+    _playCurrent();
+  }
+
+  void _cycleSpeed() {
+    final i = playbackSpeeds.indexOf(settings.speed);
+    settings.setSpeed(playbackSpeeds[(i + 1) % playbackSpeeds.length]);
+    recitation.setSpeed(settings.speed);
   }
 
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
-      animation: appState,
+      animation: Listenable.merge([appState, settings]),
       builder: (context, _) => Scaffold(
         appBar: AppBar(title: Text(widget.surah.englishName)),
         body: ListView.builder(
-          padding: const EdgeInsets.fromLTRB(
-              AppSpacing.xl, 0, AppSpacing.xl, AppSpacing.xxxl),
+          controller: _sc,
+          padding: EdgeInsets.fromLTRB(AppSpacing.xl, 0, AppSpacing.xl,
+              _running ? 96 : AppSpacing.xxxl),
           itemCount: widget.surah.ayat.length,
-          itemBuilder: (context, i) {
-            final a = widget.surah.ayat[i];
-            final bookmarked = appState.isBookmarked(widget.surah.number, a.number);
-            return Reveal(
-              index: i,
-              child: Container(
-                margin: const EdgeInsets.only(bottom: AppSpacing.lg),
-                padding: const EdgeInsets.all(AppSpacing.lg),
+          itemBuilder: (context, i) => _ayahCard(widget.surah.ayat[i], i),
+        ),
+        bottomNavigationBar: _running ? _playbackBar(context) : null,
+      ),
+    );
+  }
+
+  Widget _ayahCard(Ayah a, int i) {
+    final bookmarked = appState.isBookmarked(widget.surah.number, a.number);
+    final sounding = _running && _current == a.number;
+    return Container(
+      key: _keyFor(a.number),
+      margin: const EdgeInsets.only(bottom: AppSpacing.lg),
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        border: Border.all(
+          color: sounding ? AppColors.primary : context.borderColor,
+          width: 2,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.sm, vertical: 2),
                 decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.surface,
-                  borderRadius: BorderRadius.circular(AppRadius.lg),
-                  border: Border.all(color: context.borderColor, width: 2),
+                  color: AppColors.secondaryLight,
+                  borderRadius: BorderRadius.circular(AppRadius.xs),
                 ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: AppSpacing.sm, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: AppColors.secondaryLight,
-                            borderRadius: BorderRadius.circular(AppRadius.xs),
-                          ),
-                          child: Text('${a.number}',
-                              style: const TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w700,
-                                  color: AppColors.secondaryDark)),
-                        ),
-                        const Spacer(),
-                        if (recitation.available)
-                          Pressable(
-                            onTap: () => _play(a.number),
-                            child: Padding(
-                              padding: const EdgeInsets.all(4),
-                              child: Icon(
-                                _playingAyah == a.number
-                                    ? Icons.volume_up_rounded
-                                    : Icons.play_circle_outline_rounded,
-                                size: 22,
-                                color: AppColors.primary,
-                              ),
-                            ),
-                          ),
-                        const SizedBox(width: AppSpacing.md),
-                        Pressable(
-                          onTap: () =>
-                              appState.toggleBookmark(widget.surah.number, a.number),
-                          child: Padding(
-                            padding: const EdgeInsets.all(4),
-                            child: Icon(
-                              bookmarked ? Icons.star_rounded : Icons.star_outline_rounded,
-                              size: 22,
-                              color: bookmarked
-                                  ? AppColors.secondary
-                                  : context.mutedColor,
-                            ),
-                          ),
-                        ),
-                      ],
+                child: Text('${a.number}',
+                    style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.secondaryDark)),
+              ),
+              const Spacer(),
+              if (recitation.available)
+                Pressable(
+                  onTap: () =>
+                      sounding ? _stop() : _startFrom(a.number),
+                  child: Padding(
+                    padding: const EdgeInsets.all(4),
+                    child: Icon(
+                      sounding
+                          ? Icons.stop_circle_rounded
+                          : Icons.play_circle_outline_rounded,
+                      size: 22,
+                      color: AppColors.primary,
                     ),
-                    const SizedBox(height: AppSpacing.md),
-                    Directionality(
-                      textDirection: TextDirection.rtl,
-                      child: Text(
-                        a.arabic,
-                        style: ArabicType.ayah(
-                          size: 27 * settings.arabicScale,
-                          color: Theme.of(context).textTheme.bodyLarge?.color,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: AppSpacing.md),
-                    Text(a.translation,
-                        style: Theme.of(context).textTheme.bodyMedium),
-                  ],
+                  ),
+                ),
+              const SizedBox(width: AppSpacing.md),
+              Pressable(
+                onTap: () =>
+                    appState.toggleBookmark(widget.surah.number, a.number),
+                child: Padding(
+                  padding: const EdgeInsets.all(4),
+                  child: Icon(
+                    bookmarked
+                        ? Icons.star_rounded
+                        : Icons.star_outline_rounded,
+                    size: 22,
+                    color:
+                        bookmarked ? AppColors.secondary : context.mutedColor,
+                  ),
                 ),
               ),
-            );
-          },
+            ],
+          ),
+          const SizedBox(height: AppSpacing.md),
+          Directionality(
+            textDirection: TextDirection.rtl,
+            child: Text(
+              a.arabic,
+              style: ArabicType.ayah(
+                size: 27 * settings.arabicScale,
+                color: Theme.of(context).textTheme.bodyLarge?.color,
+              ),
+            ),
+          ),
+          const SizedBox(height: AppSpacing.md),
+          Text(a.translation,
+              style: Theme.of(context).textTheme.bodyMedium),
+        ],
+      ),
+    );
+  }
+
+  Widget _playbackBar(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        border: Border(
+          top: BorderSide(color: context.borderColor, width: 2),
+        ),
+      ),
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.lg, vertical: AppSpacing.sm),
+          child: Row(
+            children: [
+              IconButton(
+                onPressed: _stop,
+                icon: const Icon(Icons.stop_rounded),
+                color: AppColors.primary,
+                tooltip: 'توقف',
+              ),
+              Expanded(
+                child: Text(
+                  'آیهٔ $_current · پخش ${_playsThisAyah.clamp(1, settings.repeatCount)} از ${settings.repeatCount}',
+                  style: Theme.of(context).textTheme.labelMedium,
+                ),
+              ),
+              _pill(
+                label: '${settings.repeatCount}×',
+                icon: Icons.repeat_rounded,
+                onTap: () => settings.setRepeat(
+                    settings.repeatCount >= 5 ? 1 : settings.repeatCount + 1),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              _pill(
+                label: '${settings.speed}×',
+                icon: Icons.speed_rounded,
+                onTap: _cycleSpeed,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _pill(
+      {required String label,
+      required IconData icon,
+      required VoidCallback onTap}) {
+    return Pressable(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.md, vertical: AppSpacing.sm),
+        decoration: BoxDecoration(
+          color: AppColors.primaryLight,
+          borderRadius: BorderRadius.circular(AppRadius.circular),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 15, color: AppColors.primaryDeep),
+            const SizedBox(width: 4),
+            Text(label,
+                style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.primaryDeep)),
+          ],
         ),
       ),
     );
