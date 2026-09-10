@@ -56,8 +56,17 @@ class WebNav {
   /// Drops the `#access_token=...` Supabase appended after the OAuth
   /// redirect, so a manual refresh doesn't try to reuse it — and clears
   /// the captured snapshot too, so it's only ever consumed once.
+  ///
+  /// Passes the *existing* `history.state` through rather than `null`.
+  /// Flutter's browser-history integration wraps its own bookkeeping into
+  /// `history.state` (`{serialCount, state}`), and later dereferences it
+  /// non-null (e.g. when it tears the history strategy down). Replacing it
+  /// with `null` here surfaced a real uncaught null-check exception right
+  /// as Home first rendered after Google sign-in — this is where it was
+  /// coming from. Keeping the current state object clears only the URL.
   static void clearQuery() {
     _capturedFragment = null;
-    html.window.history.replaceState(null, '', Uri.base.path);
+    html.window.history
+        .replaceState(html.window.history.state, '', Uri.base.path);
   }
 }
