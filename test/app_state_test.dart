@@ -2,6 +2,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:quran_learn_app/shared/data/quran_seed.dart';
 import 'package:quran_learn_app/shared/services/app_state.dart';
 
+String ymd(DateTime d) => '${d.year.toString().padLeft(4, '0')}-'
+    '${d.month.toString().padLeft(2, '0')}-'
+    '${d.day.toString().padLeft(2, '0')}';
+
 void main() {
   setUp(() {
     // AppState is a singleton; reset the fields each test touches so tests
@@ -15,6 +19,7 @@ void main() {
       ..longestStreak = 0
       ..lastCelebratedStreakMilestone = 0
       ..lastActiveDate = null
+      ..dailyGoalMinutes = 10
       ..quizzesTaken = 0
       ..quizzesPassed = 0;
     appState.sealed.clear();
@@ -22,6 +27,7 @@ void main() {
     appState.bookmarks.clear();
     appState.reviewDue.clear();
     appState.reviewCleanRecalls.clear();
+    appState.activeDates.clear();
   });
 
   test('recordSession awards 12 XP per newly held ayah', () {
@@ -186,6 +192,55 @@ void main() {
     expect(appState.reviewCleanRecalls[key], 0);
   });
 
+  group('today counters and quests', () {
+    test('minutesToday is 0 when the last session was not today', () {
+      appState.currentStreak = 5;
+      appState.lastActiveDate =
+          ymd(DateTime.now().subtract(const Duration(days: 2)));
+      // Simulate a stale value carried in from a previous day's snapshot.
+      appState.recordSession(
+          surahNumber: 401, heldIndicesNow: {0}, didSeal: false, minutes: 7);
+      // recordSession set lastActiveDate to today and reset the counters
+      // first, so only this session's 7 minutes count.
+      expect(appState.minutesToday, 7);
+    });
+
+    test('a new calendar day resets minutes / ayat / lessons', () {
+      appState.lastActiveDate =
+          ymd(DateTime.now().subtract(const Duration(days: 1)));
+      appState.recordSession(
+          surahNumber: 402,
+          heldIndicesNow: {0, 1},
+          didSeal: false,
+          minutes: 4);
+      expect(appState.minutesToday, 4);
+      expect(appState.ayatLearnedToday, 2);
+      expect(appState.lessonsToday, 1);
+    });
+
+    test('daily quests reflect live progress and completion', () {
+      appState.dailyGoalMinutes = 10;
+      appState.recordSession(
+          surahNumber: 403,
+          heldIndicesNow: {0, 1, 2, 3},
+          didSeal: false,
+          minutes: 12);
+      final byId = {for (final q in appState.dailyQuests) q.id: q};
+      expect(byId['minutes']!.done, isTrue); // 12 >= 10
+      expect(byId['learn']!.done, isTrue); // 4 >= 3
+      expect(byId['lesson']!.done, isTrue); // 1 >= 1
+      expect(appState.questsDoneToday, 3);
+    });
+
+    test('week activity marks the days a session happened', () {
+      appState.activeDates.add(ymd(DateTime.now()));
+      final week = appState.weekActivity;
+      expect(week.length, 7);
+      expect(week.last.active, isTrue); // today
+      expect(week.first.active, isFalse); // 6 days ago
+    });
+  });
+
   group('streak milestone celebration', () {
     test('a milestone the streak just reached still celebrates', () {
       appState.currentStreak = 3;
@@ -211,10 +266,6 @@ void main() {
       expect(appState.pendingStreakMilestone, isNull);
     });
   });
-
-  String ymd(DateTime d) => '${d.year.toString().padLeft(4, '0')}-'
-      '${d.month.toString().padLeft(2, '0')}-'
-      '${d.day.toString().padLeft(2, '0')}';
 
   group('streak', () {
     test('first session ever starts the streak at 1', () {

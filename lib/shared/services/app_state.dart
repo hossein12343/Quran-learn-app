@@ -74,8 +74,54 @@ class AppState extends ChangeNotifier {
   /// not touch it; only [recordSession] does.
   String? lastActiveDate;
   int dailyGoalMinutes = 10;
-  int minutesToday = 0;
   String learningGoal = 'حفظ سوره‌های کوتاه';
+
+  /// "Today" counters. Stored raw, but every read goes through the gated
+  /// getters below: they only count if [lastActiveDate] is actually today,
+  /// so a stale value carried in from yesterday's snapshot (or the server)
+  /// reads as 0 without any midnight timer or rollover bookkeeping. Before
+  /// this gate, `minutesToday` only ever incremented — the "daily goal"
+  /// ring showed things like "۱۰۶ از ۱۰ دقیقه".
+  int _minutesToday = 0;
+  int _ayatLearnedToday = 0;
+  int _lessonsToday = 0;
+
+  bool get _countersAreToday => lastActiveDate == _todayKey();
+  int get minutesToday => _countersAreToday ? _minutesToday : 0;
+  int get ayatLearnedToday => _countersAreToday ? _ayatLearnedToday : 0;
+  int get lessonsToday => _countersAreToday ? _lessonsToday : 0;
+
+  /// 'yyyy-MM-dd' of every day a session was recorded, kept for the home
+  /// screen's week strip. Pruned to the last 60 days on load so it can't
+  /// grow without bound.
+  final Set<String> activeDates = <String>{};
+
+  /// The three rotating daily goals shown on the home screen. Purely a
+  /// checklist for the day — no XP or currency attached (the session
+  /// itself already pays XP for ayat learned); completion is its own
+  /// small reward. Rebuilt on every access so `progress` is always live.
+  List<DailyQuest> get dailyQuests => <DailyQuest>[
+        DailyQuest(
+          id: 'minutes',
+          title: 'امروز $dailyGoalMinutes دقیقه تمرین کن',
+          target: dailyGoalMinutes,
+          progress: minutesToday,
+        ),
+        DailyQuest(
+          id: 'learn',
+          title: '۳ آیهٔ تازه به حافظه بسپار',
+          target: 3,
+          progress: ayatLearnedToday,
+        ),
+        DailyQuest(
+          id: 'lesson',
+          title: 'یک درس را کامل کن',
+          target: 1,
+          progress: lessonsToday,
+        ),
+      ];
+
+  int get questsDoneToday => dailyQuests.where((q) => q.done).length;
 
   /// surah number -> indices (into that surah's ayat) actually held.
   final Map<int, Set<int>> _heldAyat = <int, Set<int>>{};
@@ -120,6 +166,7 @@ class AppState extends ChangeNotifier {
   /// protects days you skipped, not the need to show up at all.
   void _touchStreakForToday() {
     final today = _todayKey();
+    activeDates.add(today);
     if (lastActiveDate == today) return;
     final consecutive =
         lastActiveDate != null && _daysBetween(lastActiveDate!, today) == 1;
@@ -127,6 +174,20 @@ class AppState extends ChangeNotifier {
     currentStreak = (consecutive || protectedByFreeze) ? currentStreak + 1 : 1;
     lastActiveDate = today;
     if (currentStreak > longestStreak) longestStreak = currentStreak;
+  }
+
+  /// The last 7 calendar days, oldest first, each flagged if a session
+  /// landed on it — the home screen's week strip.
+  List<({DateTime day, bool active})> get weekActivity {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    return List.generate(7, (i) {
+      final d = today.subtract(Duration(days: 6 - i));
+      final key = '${d.year.toString().padLeft(4, '0')}-'
+          '${d.month.toString().padLeft(2, '0')}-'
+          '${d.day.toString().padLeft(2, '0')}';
+      return (day: d, active: activeDates.contains(key));
+    });
   }
 
   /// Call after loading state from anywhere (local disk or the server) so
@@ -575,9 +636,19 @@ class AppState extends ChangeNotifier {
     bool hadMistakes = false,
     required int minutes,
   }) {
+    // New calendar day since the last session → today's counters start
+    // fresh before this session adds to them.
+    if (lastActiveDate != _todayKey()) {
+      _minutesToday = 0;
+      _ayatLearnedToday = 0;
+      _lessonsToday = 0;
+    }
+
     final previous = _heldAyat[surahNumber] ?? const <int>{};
-    if (heldIndicesNow.length > previous.length) {
-      totalXp += (heldIndicesNow.length - previous.length) * 12;
+    final newlyHeld = heldIndicesNow.length - previous.length;
+    if (newlyHeld > 0) {
+      totalXp += newlyHeld * 12;
+      _ayatLearnedToday += newlyHeld;
     }
     _heldAyat[surahNumber] = heldIndicesNow;
     if (sealedChunk != null) {
@@ -599,14 +670,15 @@ class AppState extends ChangeNotifier {
       quizzesPassed++;
     }
     quizzesTaken++;
-    minutesToday += minutes;
+    _minutesToday += minutes;
+    _lessonsToday += 1;
     _touchStreakForToday();
     notifyListeners();
     _persistSnapshot();
 
     _pushProfileFields({
       'total_xp': totalXp,
-      'minutes_today': minutesToday,
+      'minutes_today': _minutesToday,
       'current_streak': currentStreak,
       'longest_streak': longestStreak,
       'last_active_date': lastActiveDate,
@@ -709,7 +781,7 @@ class AppState extends ChangeNotifier {
     }
     dailyGoalMinutes =
         (record['daily_goal_minutes'] as num?)?.toInt() ?? dailyGoalMinutes;
-    minutesToday = (record['minutes_today'] as num?)?.toInt() ?? minutesToday;
+    _minutesToday = (record['minutes_today'] as num?)?.toInt() ?? _minutesToday;
     final goal = record['learning_goal'] as String?;
     if (goal != null && goal.isNotEmpty) learningGoal = goal;
     isPro = record['is_pro'] as bool? ?? isPro;
@@ -728,7 +800,10 @@ class AppState extends ChangeNotifier {
       'longestStreak': longestStreak,
       'lastActiveDate': lastActiveDate,
       'dailyGoalMinutes': dailyGoalMinutes,
-      'minutesToday': minutesToday,
+      'minutesToday': _minutesToday,
+      'ayatLearnedToday': _ayatLearnedToday,
+      'lessonsToday': _lessonsToday,
+      'activeDates': activeDates.toList(),
       'learningGoal': learningGoal,
       'quizzesTaken': quizzesTaken,
       'quizzesPassed': quizzesPassed,
@@ -759,7 +834,23 @@ class AppState extends ChangeNotifier {
     lastActiveDate = snap['lastActiveDate'] as String? ?? lastActiveDate;
     dailyGoalMinutes =
         (snap['dailyGoalMinutes'] as num?)?.toInt() ?? dailyGoalMinutes;
-    minutesToday = (snap['minutesToday'] as num?)?.toInt() ?? minutesToday;
+    _minutesToday = (snap['minutesToday'] as num?)?.toInt() ?? _minutesToday;
+    _ayatLearnedToday =
+        (snap['ayatLearnedToday'] as num?)?.toInt() ?? _ayatLearnedToday;
+    _lessonsToday = (snap['lessonsToday'] as num?)?.toInt() ?? _lessonsToday;
+    final active = snap['activeDates'] as List?;
+    if (active != null) {
+      final cutoff = DateTime.now().subtract(const Duration(days: 60));
+      activeDates
+        ..clear()
+        ..addAll(active.map((e) => e as String).where((d) {
+          try {
+            return _parseYmd(d).isAfter(cutoff);
+          } on Object {
+            return false;
+          }
+        }));
+    }
     learningGoal = snap['learningGoal'] as String? ?? learningGoal;
     quizzesTaken = (snap['quizzesTaken'] as num?)?.toInt() ?? quizzesTaken;
     quizzesPassed = (snap['quizzesPassed'] as num?)?.toInt() ?? quizzesPassed;
@@ -812,6 +903,27 @@ class AppState extends ChangeNotifier {
     _authToken = null;
     _refreshToken = null;
   }
+}
+
+/// One of the three rotating goals shown on the home screen. Pure data —
+/// the icon and styling live in the home widget. Progress is a snapshot of
+/// a live [AppState] counter at read time; [AppState.dailyQuests] rebuilds
+/// the list each access so it always reflects the current values.
+class DailyQuest {
+  final String id;
+  final String title;
+  final int target;
+  final int progress;
+
+  const DailyQuest({
+    required this.id,
+    required this.title,
+    required this.target,
+    required this.progress,
+  });
+
+  bool get done => progress >= target;
+  double get fraction => target == 0 ? 1 : (progress / target).clamp(0.0, 1.0);
 }
 
 final appState = AppState.instance;
