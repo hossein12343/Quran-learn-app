@@ -25,7 +25,8 @@ class _SplashPageState extends State<SplashPage> {
   @override
   void initState() {
     super.initState();
-    _finishingSignIn = WebNav.startedOnOAuthRedirect;
+    _finishingSignIn =
+        WebNav.startedOnOAuthRedirect || appState.hasStoredSession;
     _go();
   }
 
@@ -42,12 +43,21 @@ class _SplashPageState extends State<SplashPage> {
     // caused a real `_elements.contains(element)` Navigator crash — see
     // the note on `_routeLogger` in main.dart).
     if (!signedInByGoogle) {
-      // restoreSession() applies whatever is cached on this device
-      // synchronously (before its first `await`), so appState.signedIn is
-      // already correct by the time this line runs; the slower reconcile
-      // with the backend keeps going in the background.
-      // ignore: unawaited_futures
-      appState.restoreSession();
+      if (appState.hasStoredSession) {
+        // A persisted login is on this device — wait for the token refresh
+        // (bounded) before deciding where to go, so a returning user lands
+        // straight on Home instead of flashing the login screen every cold
+        // start. restoreSession() still applies the local snapshot
+        // synchronously first, so the wait only covers the network round
+        // trip.
+        await appState
+            .restoreSession()
+            .timeout(const Duration(seconds: 6), onTimeout: () => false);
+      } else {
+        // No stored session — nothing to wait on.
+        // ignore: unawaited_futures
+        appState.restoreSession();
+      }
     }
     await Future.wait([
       loadFullQuran(),

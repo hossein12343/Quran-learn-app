@@ -307,7 +307,47 @@ class AppState extends ChangeNotifier {
   /// instantly, then — if Supabase answers — reconciles with the
   /// authoritative copy there. Never blocks: the splash screen has a
   /// timeout regardless of how this resolves.
-  Future<void> restoreSession() async {
+  /// localStorage key for the one credential that *is* persisted: the
+  /// rotating Supabase refresh token. The access token is still kept only
+  /// in memory. This is the standard SPA trade-off (and what supabase-js
+  /// does by default) — without it a returning user hit the login screen
+  /// on every single cold start, which for a daily-habit app is the
+  /// single worst piece of friction in the product.
+  static const _kRefreshTokenKey = 'auth_rt';
+
+  /// True when this device has a persisted login to try restoring — lets
+  /// the splash screen decide whether to wait for [restoreSession] before
+  /// routing, instead of flashing the login screen.
+  bool get hasStoredSession => LocalStore.get(_kRefreshTokenKey) != null;
+
+  void _persistRefreshToken() {
+    final rt = _refreshToken;
+    if (rt == null || rt.isEmpty) {
+      LocalStore.remove(_kRefreshTokenKey);
+    } else {
+      LocalStore.set(_kRefreshTokenKey, rt);
+    }
+  }
+
+  /// A failed [Backend.refresh] that carries a real server error body (not
+  /// an empty/JS-internal detail) means the token itself is dead —
+  /// expired, rotated away, or revoked — so it must be dropped rather than
+  /// retried on every launch. A bare connectivity failure keeps it.
+  bool _looksLikeDeadToken(NetException e) {
+    final d = e.technicalDetail;
+    if (d.isEmpty) return false;
+    return d.contains('refresh_token') ||
+        d.contains('Refresh Token') ||
+        d.contains('invalid_grant') ||
+        d.contains('token_expired');
+  }
+
+  /// Called once at app boot. Restores whatever was saved on this device
+  /// instantly, then — if Supabase answers — reconciles with the
+  /// authoritative copy there. Returns whether the account ended up
+  /// signed in. Never throws: a failed refresh just leaves [signedIn]
+  /// false.
+  Future<bool> restoreSession() async {
     darkMode = LocalStore.get('dark_mode') == '1';
 
     final raw = LocalStore.get('session');
@@ -331,18 +371,24 @@ class AppState extends ChangeNotifier {
     // a rebuild, so nothing here is actually blocked on the notification.
     scheduleMicrotask(notifyListeners);
 
-    final refreshToken = _refreshToken;
-    if (refreshToken == null) return;
+    final refreshToken = _refreshToken ?? LocalStore.get(_kRefreshTokenKey);
+    if (refreshToken == null) return false;
     try {
       final session = await Backend.refresh(refreshToken);
       _adoptSession(session);
       unawaited(_finishSigningIn());
       syncNotice = null;
     } on NetException catch (e) {
-      syncNotice = 'آفلاین — نمایش آنچه روی این دستگاه ذخیره شده است.';
-      AppLog.warn('Session restore could not reach the backend', error: e);
+      if (_looksLikeDeadToken(e)) {
+        _refreshToken = null;
+        LocalStore.remove(_kRefreshTokenKey);
+      } else {
+        syncNotice = 'آفلاین — نمایش آنچه روی این دستگاه ذخیره شده است.';
+        AppLog.warn('Session restore could not reach the backend', error: e);
+      }
     }
     notifyListeners();
+    return signedIn;
   }
 
   /// Signs in only after Supabase has authenticated the credentials.
@@ -385,6 +431,7 @@ class AppState extends ChangeNotifier {
     _userId = session.userId;
     if (session.email.isNotEmpty) email = session.email;
     signedIn = true;
+    _persistRefreshToken();
     _persistSnapshot();
   }
 
@@ -554,6 +601,7 @@ class AppState extends ChangeNotifier {
     _refreshToken = null;
     _userId = null;
     LocalStore.remove('session');
+    LocalStore.remove(_kRefreshTokenKey);
     notifyListeners();
   }
 
