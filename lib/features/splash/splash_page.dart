@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import '../../core/theme/app_theme.dart';
 import '../../shared/data/quran_seed.dart';
 import '../../shared/services/app_state.dart';
+import '../../shared/services/oauth/web_nav.dart';
 import '../auth/auth_pages.dart';
 
 /// Restores whatever session was saved on this device before deciding
@@ -16,9 +18,14 @@ class SplashPage extends StatefulWidget {
 }
 
 class _SplashPageState extends State<SplashPage> {
+  /// Set once we know this boot came back from the Google OAuth redirect,
+  /// so the screen reads as "signing you in…" rather than a bare logo.
+  bool _finishingSignIn = false;
+
   @override
   void initState() {
     super.initState();
+    _finishingSignIn = WebNav.startedOnOAuthRedirect;
     _go();
   }
 
@@ -51,15 +58,57 @@ class _SplashPageState extends State<SplashPage> {
       Navigator.of(context).pushReplacementNamed('/home');
       return;
     }
+    // Came back from the Google redirect but the session isn't confirmed
+    // yet. Never drop the user on the login form here — that reads as
+    // "sign-in failed" when it's usually just a slow network settling
+    // after the redirect. Hold on this loading screen and keep checking
+    // until the background restore flips `signedIn`, then continue home.
+    if (WebNav.startedOnOAuthRedirect && !appState.signedIn) {
+      final ok = await _waitForSignIn(const Duration(seconds: 8));
+      if (!mounted) return;
+      if (ok) {
+        Navigator.of(context).pushReplacementNamed('/home');
+        return;
+      }
+    }
     Navigator.of(context).pushReplacementNamed(
       appState.signedIn ? '/home' : '/login',
     );
   }
 
+  /// Polls `appState.signedIn` until it turns true or [budget] runs out.
+  Future<bool> _waitForSignIn(Duration budget) async {
+    final deadline = DateTime.now().add(budget);
+    while (!appState.signedIn && DateTime.now().isBefore(deadline)) {
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+    }
+    return appState.signedIn;
+  }
+
   @override
   Widget build(BuildContext context) {
-    return const Scaffold(
-      body: Center(child: Wordmark(size: 84)),
+    return Scaffold(
+      body: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Wordmark(size: 84),
+            const SizedBox(height: AppSpacing.xxl),
+            const SizedBox(
+              width: 26,
+              height: 26,
+              child: CircularProgressIndicator(strokeWidth: 3),
+            ),
+            if (_finishingSignIn) ...[
+              const SizedBox(height: AppSpacing.lg),
+              Text(
+                'در حال ورود…',
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+            ],
+          ],
+        ),
+      ),
     );
   }
 }

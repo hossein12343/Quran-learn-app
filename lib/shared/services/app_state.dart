@@ -424,39 +424,51 @@ class AppState extends ChangeNotifier {
       AppLog.warn('OAuth redirect ignored: fragment missing tokens');
       return false;
     }
-    try {
-      // The fragment carries the tokens directly but not the user id/email
-      // — refreshing immediately gets us those plus a clean, verified
-      // pair, and is the *only* network call this needs to wait on:
-      // Supabase already verified the OAuth exchange to produce the
-      // fragment in the first place, so once this refresh confirms it,
-      // there's real proof of identity and nothing left to block on
-      // before SplashPage navigates home. This one call used to be
-      // followed by three more, serially — a profile fetch plus two
-      // pulls — which is what made "sign in with Google" take several
-      // real seconds. See `_finishSigningIn`.
-      final session = await Backend.refresh(refreshTokenValue);
-      _adoptSession(session);
-      notifyListeners();
-      unawaited(_finishSigningIn().then((_) {
-        // The `handle_new_user` trigger only knows about `display_name`
-        // (what password signup sends) — Google's own name lands in
-        // metadata under a different key. Applied after the background
-        // sync rather than gating navigation on it; whichever name was
-        // already on the profile shows first and this corrects it a
-        // moment later, same as `_finishSigningIn`'s own fields do.
-        final googleName = (session.metadata['full_name'] ??
-                session.metadata['name']) as String?;
-        if (googleName != null && googleName.isNotEmpty) {
-          displayName = googleName;
-          _pushProfileFields({'display_name': googleName});
-          notifyListeners();
+    // The fragment carries the tokens directly but not the user id/email
+    // — refreshing immediately gets us those plus a clean, verified
+    // pair, and is the *only* network call this needs to wait on:
+    // Supabase already verified the OAuth exchange to produce the
+    // fragment in the first place, so once this refresh confirms it,
+    // there's real proof of identity and nothing left to block on
+    // before SplashPage navigates home. This one call used to be
+    // followed by three more, serially — a profile fetch plus two
+    // pulls — which is what made "sign in with Google" take several
+    // real seconds. See `_finishSigningIn`.
+    //
+    // Retried a few times: the redirect back from Google routinely lands
+    // while the phone's network is still re-settling, and a single failed
+    // refresh here used to drop the user back on the login screen even
+    // though their OAuth exchange had already succeeded. `refreshTokenValue`
+    // is already captured above, so retrying after `clearQuery()` is safe.
+    for (var attempt = 0;; attempt++) {
+      try {
+        final session = await Backend.refresh(refreshTokenValue);
+        _adoptSession(session);
+        notifyListeners();
+        unawaited(_finishSigningIn().then((_) {
+          // The `handle_new_user` trigger only knows about `display_name`
+          // (what password signup sends) — Google's own name lands in
+          // metadata under a different key. Applied after the background
+          // sync rather than gating navigation on it; whichever name was
+          // already on the profile shows first and this corrects it a
+          // moment later, same as `_finishSigningIn`'s own fields do.
+          final googleName = (session.metadata['full_name'] ??
+                  session.metadata['name']) as String?;
+          if (googleName != null && googleName.isNotEmpty) {
+            displayName = googleName;
+            _pushProfileFields({'display_name': googleName});
+            notifyListeners();
+          }
+        }));
+        return true;
+      } on NetException catch (e) {
+        if (attempt >= 3) {
+          AppLog.error('Google sign-in failed to complete', error: e);
+          return false;
         }
-      }));
-      return true;
-    } on NetException catch (e) {
-      AppLog.error('Google sign-in failed to complete', error: e);
-      return false;
+        await Future<void>.delayed(
+            Duration(milliseconds: 500 * (attempt + 1)));
+      }
     }
   }
 

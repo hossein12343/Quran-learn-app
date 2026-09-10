@@ -13,9 +13,21 @@ class WebNav {
   /// the live URL is what actually fixes it.
   static String? _capturedFragment;
 
+  /// Whether this page load began on a Supabase OAuth redirect. Unlike the
+  /// fragment above (consumed once by `clearQuery`), this stays true for
+  /// the life of the tab so the splash screen knows to sit on its loading
+  /// state and keep trying to finish sign-in, rather than bouncing the
+  /// user to the login form the moment the first token refresh is slow or
+  /// briefly fails (common right after the redirect back on mobile).
+  static bool _startedOnOAuthRedirect = false;
+
   static void captureInitialFragment() {
     _capturedFragment = html.window.location.hash;
+    _startedOnOAuthRedirect =
+        (_capturedFragment ?? '').contains('access_token=');
   }
+
+  static bool get startedOnOAuthRedirect => _startedOnOAuthRedirect;
 
   static String? queryParam(String key) => Uri.base.queryParameters[key];
 
