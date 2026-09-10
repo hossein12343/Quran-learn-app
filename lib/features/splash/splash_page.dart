@@ -59,10 +59,12 @@ class _SplashPageState extends State<SplashPage> {
         appState.restoreSession();
       }
     }
-    await Future.wait([
-      loadFullQuran(),
-      Future<void>.delayed(const Duration(milliseconds: 300)),
-    ]);
+    // The full 114-surah parse no longer gates startup — kick it off and
+    // let the shell rebuild against `quranRevision` when it lands (see
+    // quran_seed.dart). The app opens on the 4-surah fallback immediately.
+    // ignore: unawaited_futures
+    loadFullQuran();
+    await Future<void>.delayed(const Duration(milliseconds: 300));
     if (!mounted) return;
     if (signedInByGoogle) {
       Navigator.of(context).pushReplacementNamed('/home');

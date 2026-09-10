@@ -232,12 +232,15 @@ void main() {
       expect(appState.questsDoneToday, 3);
     });
 
-    test('week activity marks the days a session happened', () {
+    test('this week: Saturday-first, today flagged, session marked active', () {
       appState.activeDates.add(ymd(DateTime.now()));
-      final week = appState.weekActivity;
+      final week = appState.thisWeek;
       expect(week.length, 7);
-      expect(week.last.active, isTrue); // today
-      expect(week.first.active, isFalse); // 6 days ago
+      expect(week.first.day.weekday, DateTime.saturday);
+      final todayCell = week.firstWhere((d) => d.isToday);
+      expect(todayCell.active, isTrue);
+      expect(todayCell.future, isFalse);
+      expect(week.where((d) => d.isToday).length, 1);
     });
   });
 

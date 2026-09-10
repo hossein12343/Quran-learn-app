@@ -154,6 +154,10 @@ class AppState extends ChangeNotifier {
     return DateTime(int.parse(p[0]), int.parse(p[1]), int.parse(p[2]));
   }
 
+  static String ymdKey(DateTime d) => '${d.year.toString().padLeft(4, '0')}-'
+      '${d.month.toString().padLeft(2, '0')}-'
+      '${d.day.toString().padLeft(2, '0')}';
+
   int _daysBetween(String a, String b) =>
       _parseYmd(b).difference(_parseYmd(a)).inDays;
 
@@ -176,17 +180,25 @@ class AppState extends ChangeNotifier {
     if (currentStreak > longestStreak) longestStreak = currentStreak;
   }
 
-  /// The last 7 calendar days, oldest first, each flagged if a session
-  /// landed on it — the home screen's week strip.
-  List<({DateTime day, bool active})> get weekActivity {
+  /// The current Persian calendar week, Saturday → Friday. Each day is
+  /// flagged active if a session landed on it, plus whether it is today
+  /// and whether it is still ahead. The home strip renders this RTL, so
+  /// Saturday sits on the right where a Persian reader expects it.
+  List<({DateTime day, bool active, bool isToday, bool future})> get thisWeek {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
+    // DateTime.weekday has Sat = 6, Sun = 7, Mon = 1 … so this many days
+    // back from today lands on this week's Saturday.
+    final sinceSaturday = (today.weekday + 1) % 7;
+    final saturday = today.subtract(Duration(days: sinceSaturday));
     return List.generate(7, (i) {
-      final d = today.subtract(Duration(days: 6 - i));
-      final key = '${d.year.toString().padLeft(4, '0')}-'
-          '${d.month.toString().padLeft(2, '0')}-'
-          '${d.day.toString().padLeft(2, '0')}';
-      return (day: d, active: activeDates.contains(key));
+      final d = saturday.add(Duration(days: i));
+      return (
+        day: d,
+        active: activeDates.contains(ymdKey(d)),
+        isToday: d == today,
+        future: d.isAfter(today),
+      );
     });
   }
 

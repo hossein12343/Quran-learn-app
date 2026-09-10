@@ -351,56 +351,88 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  /// The last seven days as a compact row of dots \u2014 a session on a day
-  /// fills its dot with the streak fire. Today's dot is ringed.
+  /// This calendar week, Saturday \u2192 Friday. A day a session landed on
+  /// shows the streak fire; today is ringed; days still ahead are faint.
+  /// Rendered RTL so Saturday sits on the right.
   Widget _weekStrip() {
-    // Persian week runs Saturday-first; DateTime.weekday is Mon=1..Sun=7.
-    const labels = ['\u0634', '\u06cc', '\u062f', '\u0633', '\u0686', '\u067e', '\u062c']; // Sat..Fri
-    String label(DateTime d) => labels[(d.weekday + 1) % 7];
-    final days = appState.weekActivity;
+    // Persian weekday initials, Saturday first \u2014 matches AppState.thisWeek.
+    const labels = ['\u0634', '\u06cc', '\u062f', '\u0633', '\u0686', '\u067e', '\u062c'];
+    final week = appState.thisWeek;
+    final surface = Theme.of(context).colorScheme.surfaceContainerHighest;
+
     return _panel(
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          for (final d in days)
-            Column(
-              children: [
-                Text(
-                  label(d.day),
-                  style: Theme.of(context).textTheme.labelSmall,
-                ),
-                const SizedBox(height: 6),
-                Container(
-                  width: 30,
-                  height: 30,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: d.active
-                        ? AppColors.goldLight
-                        : Theme.of(context).colorScheme.surfaceContainerHighest,
-                    border: _isToday(d.day)
-                        ? Border.all(color: AppColors.primary, width: 2)
-                        : null,
-                  ),
-                  child: Icon(
-                    d.active
-                        ? Icons.local_fire_department_rounded
-                        : Icons.circle,
-                    size: d.active ? 18 : 6,
-                    color: d.active ? AppColors.streakFire : context.mutedColor,
-                  ),
-                ),
-              ],
+          Row(
+            children: [
+              const Icon(Icons.local_fire_department_rounded,
+                  color: AppColors.streakFire, size: 20),
+              const SizedBox(width: AppSpacing.sm),
+              Text(
+                appState.currentStreak > 0
+                    ? '${appState.currentStreak} \u0631\u0648\u0632 \u067e\u0634\u062a\u200c\u0633\u0631\u0647\u0645'
+                    : '\u0627\u06cc\u0646 \u0647\u0641\u062a\u0647 \u0631\u0627 \u0634\u0631\u0648\u0639 \u06a9\u0646',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.md),
+          Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 380),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  for (var i = 0; i < 7; i++)
+                    Column(
+                      children: [
+                        Text(
+                          labels[i],
+                          style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                                color: week[i].isToday ? AppColors.primary : null,
+                                fontWeight: week[i].isToday
+                                    ? FontWeight.w800
+                                    : null,
+                              ),
+                        ),
+                        const SizedBox(height: 6),
+                        Container(
+                          width: 34,
+                          height: 34,
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: week[i].active
+                                ? AppColors.goldLight
+                                : (week[i].future
+                                    ? Colors.transparent
+                                    : surface),
+                            border: week[i].isToday
+                                ? Border.all(
+                                    color: AppColors.primary, width: 2)
+                                : (week[i].future
+                                    ? Border.all(color: surface, width: 1.5)
+                                    : null),
+                          ),
+                          child: week[i].active
+                              ? const Icon(Icons.local_fire_department_rounded,
+                                  size: 19, color: AppColors.streakFire)
+                              : Icon(Icons.circle,
+                                  size: 5,
+                                  color: week[i].future
+                                      ? Colors.transparent
+                                      : context.mutedColor),
+                        ),
+                      ],
+                    ),
+                ],
+              ),
             ),
+          ),
         ],
       ),
     );
-  }
-
-  bool _isToday(DateTime d) {
-    final n = DateTime.now();
-    return d.year == n.year && d.month == n.month && d.day == n.day;
   }
 
   static const _questIcons = <String, IconData>{

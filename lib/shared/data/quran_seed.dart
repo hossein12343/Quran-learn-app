@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'package:flutter/foundation.dart' show compute;
+import 'package:flutter/foundation.dart' show compute, ValueNotifier;
 import 'package:flutter/services.dart' show rootBundle;
 
 /// Qur'anic text reproduced verbatim from the standard Hafs mushaf — the
@@ -159,6 +159,14 @@ abstract class ReviewSchedule {
 
 bool quranFullyLoaded = false;
 
+/// Bumped once [loadFullQuran] has swapped in all 114 surahs. The app no
+/// longer blocks startup on that parse (a 3MB `jsonDecode` plus ~6,236
+/// object allocations — real seconds on a mid-range phone): the shell
+/// opens immediately on the 4-surah fallback and rebuilds against this
+/// notifier when the full mushaf is ready. `main.dart` merges it into the
+/// top-level `AnimatedBuilder`.
+final ValueNotifier<int> quranRevision = ValueNotifier<int>(0);
+
 /// Replaces the 4-surah fallback above with all 114 surahs. Called once at
 /// startup (see splash_page.dart); safe to call again, and leaves the
 /// fallback in place if the asset can't be read for any reason.
@@ -177,6 +185,7 @@ Future<void> loadFullQuran() async {
     final raw = await rootBundle.loadString('assets/quran_full.json');
     surahs = await compute(_parseQuranSurahs, raw);
     quranFullyLoaded = true;
+    quranRevision.value++;
   } on Object {
     // Asset missing or malformed — keep the 4-surah fallback.
   }

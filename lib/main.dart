@@ -8,6 +8,7 @@ import 'core/theme/app_theme.dart';
 import 'features/auth/auth_pages.dart';
 import 'features/main/main_shell.dart';
 import 'features/splash/splash_page.dart';
+import 'shared/data/quran_seed.dart';
 import 'shared/services/app_log.dart';
 import 'shared/services/app_state.dart';
 import 'shared/services/audio.dart';
@@ -193,7 +194,7 @@ class QuranLearnApp extends StatelessWidget {
       // like the login/signup screens, that never listen to `settings`
       // themselves) as a normal rebuild-from-an-ancestor, no per-screen
       // wiring required.
-      animation: Listenable.merge([appState, settings]),
+      animation: Listenable.merge([appState, settings, quranRevision]),
       builder: (context, _) {
         return MaterialApp(
           title: 'یادگیری قرآن',
