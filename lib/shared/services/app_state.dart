@@ -55,6 +55,20 @@ class AppState extends ChangeNotifier {
     _persistSnapshot();
   }
 
+  /// After loading a streak from anywhere (local snapshot or the server),
+  /// treat every milestone the streak is already *past* as seen. Without
+  /// this, a fresh device — where [lastCelebratedStreakMilestone] starts at
+  /// 0 — throws a stale "۳ روز پشت‌سرهم!" party at someone actually on day
+  /// 40. A milestone the streak sits exactly on is left uncelebrated so it
+  /// can still fire. Only ever raises the baseline, never lowers it.
+  void seedStreakMilestoneBaseline() {
+    var baseline = lastCelebratedStreakMilestone;
+    for (final m in streakMilestones) {
+      if (m < currentStreak && m > baseline) baseline = m;
+    }
+    lastCelebratedStreakMilestone = baseline;
+  }
+
   /// 'yyyy-MM-dd' of the last calendar day a session was recorded — the
   /// only thing that actually drives [currentStreak]. Login/app-open does
   /// not touch it; only [recordSession] does.
@@ -240,6 +254,7 @@ class AppState extends ChangeNotifier {
       try {
         _applySnapshot(jsonDecode(raw) as Map<String, dynamic>);
         _reconcileStreakIfBroken();
+        seedStreakMilestoneBaseline();
         // Snapshots contain only non-sensitive local learning state. They
         // are never proof of identity, so restoring one must not authenticate
         // the device or unlock account-only screens.
@@ -698,6 +713,7 @@ class AppState extends ChangeNotifier {
     final goal = record['learning_goal'] as String?;
     if (goal != null && goal.isNotEmpty) learningGoal = goal;
     isPro = record['is_pro'] as bool? ?? isPro;
+    seedStreakMilestoneBaseline();
     _persistSnapshot();
   }
 

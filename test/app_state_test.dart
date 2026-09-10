@@ -13,6 +13,7 @@ void main() {
       ..totalXp = 0
       ..currentStreak = 0
       ..longestStreak = 0
+      ..lastCelebratedStreakMilestone = 0
       ..lastActiveDate = null
       ..quizzesTaken = 0
       ..quizzesPassed = 0;
@@ -183,6 +184,32 @@ void main() {
       minutes: 1,
     );
     expect(appState.reviewCleanRecalls[key], 0);
+  });
+
+  group('streak milestone celebration', () {
+    test('a milestone the streak just reached still celebrates', () {
+      appState.currentStreak = 3;
+      appState.seedStreakMilestoneBaseline();
+      expect(appState.pendingStreakMilestone, 3);
+    });
+
+    test('a fresh device does not throw a stale party for a passed milestone',
+        () {
+      // currentStreak restored as 40, but lastCelebrated is still 0 (new
+      // device). Without seeding, pendingStreakMilestone would be 30.
+      appState.currentStreak = 40;
+      appState.seedStreakMilestoneBaseline();
+      expect(appState.pendingStreakMilestone, isNull);
+      expect(appState.lastCelebratedStreakMilestone, 30);
+    });
+
+    test('seeding never lowers an already-higher baseline', () {
+      appState.currentStreak = 8;
+      appState.lastCelebratedStreakMilestone = 7;
+      appState.seedStreakMilestoneBaseline();
+      expect(appState.lastCelebratedStreakMilestone, 7);
+      expect(appState.pendingStreakMilestone, isNull);
+    });
   });
 
   String ymd(DateTime d) => '${d.year.toString().padLeft(4, '0')}-'

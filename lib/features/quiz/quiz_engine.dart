@@ -325,10 +325,10 @@ class Session {
         .toList()
       ..shuffle(_rng);
     final opts = <String>[correct, ...pool.take(3)];
-    var filler = 0;
-    while (opts.length < 4) {
-      opts.add('$correct${'​' * (++filler)}');
-    }
+    // If the surah plus the mushaf-wide fallback pool genuinely can't
+    // supply three distinct distractors, present fewer options rather than
+    // padding with zero-width-space copies of the answer — those rendered
+    // identically to the correct choice and made a right answer look wrong.
     opts.shuffle(_rng);
     return opts;
   }
