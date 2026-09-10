@@ -134,11 +134,25 @@ class AppState extends ChangeNotifier {
   /// key without needing a real value type.
   final Set<int> sealedLevels = <int>{};
 
-  /// levelKey -> when it's next due for review, and how many times in a
-  /// row it's survived that review cleanly (widens the gap each time —
-  /// see [ReviewSchedule]).
+  /// Per sealed level (`levelKey`), the spaced-review scheduler's state:
+  /// when it's next due, how many times in a row it's been recalled
+  /// (`reviewCleanRecalls`), the per-level ease factor, and the current
+  /// gap in days. See [ReviewSchedule] / [ReviewState].
   final Map<int, DateTime> reviewDue = <int, DateTime>{};
   final Map<int, int> reviewCleanRecalls = <int, int>{};
+  final Map<int, double> reviewEase = <int, double>{};
+  final Map<int, int> reviewInterval = <int, int>{};
+
+  ReviewState _reviewStateFor(int key) {
+    final reps = reviewCleanRecalls[key] ?? 0;
+    return ReviewState(
+      reps: reps,
+      ease: reviewEase[key] ?? ReviewSchedule.startEase,
+      intervalDays: reviewInterval[key] ??
+          ReviewSchedule.legacyLadder[
+              reps.clamp(0, ReviewSchedule.legacyLadder.length - 1)],
+    );
+  }
 
   // ---------------------------------------------------------------- streak
 
@@ -715,14 +729,16 @@ class AppState extends ChangeNotifier {
       final key = levelKey(surahNumber, sealedChunk);
       final firstTime = sealedLevels.add(key);
       if (firstTime) totalXp += 15;
-      // A review cleared with no lapse pushes the next one further out; a
-      // level sealed for the first time, or a review with a lapse in it,
-      // starts the schedule back from zero — a shaky recall shouldn't earn
-      // the same widened gap as a clean one.
-      final recalls =
-          (firstTime || hadMistakes) ? 0 : (reviewCleanRecalls[key] ?? 0) + 1;
-      reviewCleanRecalls[key] = recalls;
-      reviewDue[key] = ReviewSchedule.nextDue(DateTime.now(), recalls);
+      // First seal → due tomorrow. A clean review multiplies the gap by
+      // this level's ease and nudges the ease up; a lapse shrinks both but
+      // keeps most of what the level earned. See [ReviewSchedule].
+      final next = firstTime
+          ? ReviewSchedule.onFirstSeal()
+          : ReviewSchedule.onReview(_reviewStateFor(key), clean: !hadMistakes);
+      reviewCleanRecalls[key] = next.reps;
+      reviewEase[key] = next.ease;
+      reviewInterval[key] = next.intervalDays;
+      reviewDue[key] = ReviewSchedule.dueDate(DateTime.now(), next.intervalDays);
     }
     if (didSeal) {
       sealed.add(surahNumber);
@@ -872,6 +888,8 @@ class AppState extends ChangeNotifier {
       'sealedLevels': sealedLevels.toList(),
       'reviewDue': reviewDue.map((k, v) => MapEntry('$k', v.toIso8601String())),
       'reviewCleanRecalls': reviewCleanRecalls.map((k, v) => MapEntry('$k', v)),
+      'reviewEase': reviewEase.map((k, v) => MapEntry('$k', v)),
+      'reviewInterval': reviewInterval.map((k, v) => MapEntry('$k', v)),
       'bookmarks': bookmarks,
       // Cached for offline display only — `_applyRemoteProfile` (the
       // actual source of truth) overwrites this on every successful
@@ -950,6 +968,20 @@ class AppState extends ChangeNotifier {
       reviewCleanRecalls.clear();
       reviewRecallsRaw.forEach((k, v) {
         reviewCleanRecalls[int.parse(k)] = (v as num).toInt();
+      });
+    }
+    final reviewEaseRaw = snap['reviewEase'] as Map<String, dynamic>?;
+    if (reviewEaseRaw != null) {
+      reviewEase.clear();
+      reviewEaseRaw.forEach((k, v) {
+        reviewEase[int.parse(k)] = (v as num).toDouble();
+      });
+    }
+    final reviewIntervalRaw = snap['reviewInterval'] as Map<String, dynamic>?;
+    if (reviewIntervalRaw != null) {
+      reviewInterval.clear();
+      reviewIntervalRaw.forEach((k, v) {
+        reviewInterval[int.parse(k)] = (v as num).toInt();
       });
     }
     final bookmarksRaw = snap['bookmarks'] as Map<String, dynamic>?;

@@ -143,16 +143,69 @@ const int kChunkSize = 8;
 
 int chunkCountFor(Surah s) => (s.length / kChunkSize).ceil();
 
-/// Spaced review: a level sealed today comes due again in 4 days, then the
-/// gap widens each time it's cleared cleanly. Keyed off "clean recalls" —
-/// how many times in a row it's survived review without a mistake — not
-/// calendar time, so a lapse (handled by whoever calls this) can reset the
-/// count and shrink the gap back down.
-abstract class ReviewSchedule {
-  static const List<int> days = <int>[4, 7, 14, 30, 60, 90];
+/// What the spaced-review scheduler tracks per sealed level: how many
+/// times in a row it has been recalled, a per-level ease factor (how fast
+/// its gap grows — SM-2's core idea: an item you find easy spaces out
+/// faster than one you keep stumbling on), and the current gap in days.
+class ReviewState {
+  final int reps;
+  final double ease;
+  final int intervalDays;
 
-  static DateTime nextDue(DateTime last, int cleanRecalls) =>
-      last.add(Duration(days: days[cleanRecalls.clamp(0, days.length - 1)]));
+  const ReviewState({
+    required this.reps,
+    required this.ease,
+    required this.intervalDays,
+  });
+}
+
+/// SM-2-style spaced review, adapted to this app's coarse signal. Anki/
+/// SuperMemo grade each recall 0–5; here a review level only ever clears
+/// *cleanly* or clears *with a lapse in it*, so this maps that two-way
+/// signal onto the same mechanics:
+///
+///  * first seal → due tomorrow (the forgetting curve is steepest in the
+///    first day), then +3 days, then each clean recall multiplies the gap
+///    by the level's ease and nudges the ease up;
+///  * a lapse shrinks the gap and the ease but — unlike the old fixed
+///    `[4,7,14,30,60,90]` ladder, which reset to day 4 on any mistake —
+///    does NOT discard everything the level earned. One slip after months
+///    of clean recalls costs a step, not a restart.
+abstract class ReviewSchedule {
+  static const double startEase = 2.3;
+  static const double _minEase = 1.3;
+  static const double _maxEase = 2.8;
+  static const int _maxInterval = 180;
+
+  /// Legacy `[4,7,14,30,60,90]` ladder — kept only to migrate the interval
+  /// for levels sealed before this scheduler existed (their snapshot has a
+  /// rep count but no stored interval/ease).
+  static const List<int> legacyLadder = <int>[4, 7, 14, 30, 60, 90];
+
+  static ReviewState onFirstSeal() =>
+      const ReviewState(reps: 1, ease: startEase, intervalDays: 1);
+
+  static ReviewState onReview(ReviewState s, {required bool clean}) {
+    if (clean) {
+      final reps = s.reps + 1;
+      final ease = (s.ease + 0.12).clamp(_minEase, _maxEase);
+      final interval = reps <= 1
+          ? 1
+          : reps == 2
+              ? 3
+              : (s.intervalDays * s.ease).round().clamp(1, _maxInterval);
+      return ReviewState(reps: reps, ease: ease, intervalDays: interval);
+    }
+    return ReviewState(
+      reps: s.reps > 1 ? s.reps - 1 : 1,
+      ease: (s.ease - 0.2).clamp(_minEase, _maxEase),
+      intervalDays: (s.intervalDays * 0.4).round().clamp(1, _maxInterval),
+    );
+  }
+
+  static DateTime dueDate(DateTime from, int intervalDays) =>
+      DateTime(from.year, from.month, from.day)
+          .add(Duration(days: intervalDays));
 
   static bool isDue(DateTime due) => !DateTime.now().isBefore(due);
 }

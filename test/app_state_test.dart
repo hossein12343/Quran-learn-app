@@ -27,6 +27,8 @@ void main() {
     appState.bookmarks.clear();
     appState.reviewDue.clear();
     appState.reviewCleanRecalls.clear();
+    appState.reviewEase.clear();
+    appState.reviewInterval.clear();
     appState.activeDates.clear();
   });
 
@@ -139,7 +141,7 @@ void main() {
     expect(appState.totalXp, xpBefore);
   });
 
-  test('sealing a level for the first time schedules review 4 days out', () {
+  test('first seal schedules review for tomorrow', () {
     appState.recordSession(
       surahNumber: 1,
       heldIndicesNow: {0, 1, 2, 3, 4, 5, 6},
@@ -148,13 +150,13 @@ void main() {
       minutes: 3,
     );
     final key = appState.levelKey(1, 0);
-    final due = appState.reviewDue[key]!;
-    final expected = DateTime.now().add(const Duration(days: 4));
-    expect(due.difference(expected).inMinutes.abs(), lessThan(2));
-    expect(appState.dueForReview, isEmpty); // not due for 4 days yet
+    expect(appState.reviewInterval[key], 1);
+    expect(appState.reviewCleanRecalls[key], 1);
+    expect(appState.dueForReview, isEmpty); // not due until tomorrow
   });
 
-  test('a clean review widens the gap; a lapsed one resets it', () {
+  test('SM-2: clean reviews grow the gap and the ease; a lapse trims both '
+      'without a full reset', () {
     appState.recordSession(
       surahNumber: 112,
       heldIndicesNow: {0, 1, 2, 3},
@@ -163,24 +165,35 @@ void main() {
       minutes: 2,
     );
     final key = appState.levelKey(112, 0);
-    // Force it due now, then review it cleanly.
-    appState.reviewDue[key] = DateTime.now().subtract(const Duration(minutes: 1));
-    expect(appState.dueForReview, isNotEmpty);
 
-    appState.recordSession(
-      surahNumber: 112,
-      heldIndicesNow: {0, 1, 2, 3},
-      didSeal: true,
-      sealedChunk: 0,
-      hadMistakes: false,
-      minutes: 1,
-    );
-    expect(appState.reviewCleanRecalls[key], 1);
-    final secondDue = appState.reviewDue[key]!;
-    expect(secondDue.isAfter(DateTime.now().add(const Duration(days: 6))),
-        isTrue); // day 7 tier now, not day 4
+    void reviewClean() {
+      appState.reviewDue[key] =
+          DateTime.now().subtract(const Duration(minutes: 1));
+      appState.recordSession(
+        surahNumber: 112,
+        heldIndicesNow: {0, 1, 2, 3},
+        didSeal: true,
+        sealedChunk: 0,
+        hadMistakes: false,
+        minutes: 1,
+      );
+    }
 
-    // A lapsed review resets the streak back to the 4-day tier.
+    reviewClean(); // reps 2 -> interval 3
+    expect(appState.reviewCleanRecalls[key], 2);
+    expect(appState.reviewInterval[key], 3);
+
+    reviewClean(); // reps 3 -> interval round(3 * ease)
+    expect(appState.reviewCleanRecalls[key], 3);
+    final grownInterval = appState.reviewInterval[key]!;
+    expect(grownInterval, greaterThan(3));
+    final grownEase = appState.reviewEase[key]!;
+    expect(grownEase, greaterThan(ReviewSchedule.startEase));
+
+    // A lapse: interval and ease shrink, but reps only steps back by one
+    // (the old ladder would have reset to zero).
+    appState.reviewDue[key] =
+        DateTime.now().subtract(const Duration(minutes: 1));
     appState.recordSession(
       surahNumber: 112,
       heldIndicesNow: {0, 1, 2, 3},
@@ -189,7 +202,31 @@ void main() {
       hadMistakes: true,
       minutes: 1,
     );
-    expect(appState.reviewCleanRecalls[key], 0);
+    expect(appState.reviewCleanRecalls[key], 2); // not 0
+    expect(appState.reviewInterval[key], lessThan(grownInterval));
+    expect(appState.reviewEase[key], lessThan(grownEase));
+  });
+
+  test('a pre-SM-2 sealed level (rep count only) migrates onto the new '
+      'scheduler without losing its place', () {
+    final key = appState.levelKey(113, 0);
+    // Simulate a snapshot from before reviewEase/reviewInterval existed.
+    appState.sealedLevels.add(key);
+    appState.reviewCleanRecalls[key] = 2; // old ladder day-14 tier
+    appState.reviewDue[key] =
+        DateTime.now().subtract(const Duration(minutes: 1));
+
+    appState.recordSession(
+      surahNumber: 113,
+      heldIndicesNow: {0, 1, 2, 3, 4},
+      didSeal: true,
+      sealedChunk: 0,
+      hadMistakes: false,
+      minutes: 1,
+    );
+    // Started from the legacy 14-day interval, grown by the default ease.
+    expect(appState.reviewInterval[key], greaterThan(14));
+    expect(appState.reviewCleanRecalls[key], 3);
   });
 
   group('today counters and quests', () {
