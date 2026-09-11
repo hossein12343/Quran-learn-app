@@ -127,6 +127,43 @@ class AboutPage extends StatelessWidget {
               index: 9,
               child: _card(
                 context,
+                icon: Icons.text_fields_rounded,
+                title: 'راهنمای تلفظ لاتین',
+                body: 'برای کسی که هنوز رسم‌الخط عربی را روان نمی‌خواند، '
+                    'راهنمای تلفظ به حروف لاتین زیر هر آیه نمایش داده '
+                    'می‌شود — از طریق Quran.com.',
+              ),
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            Reveal(
+              index: 10,
+              child: _card(
+                context,
+                icon: Icons.self_improvement_rounded,
+                title: 'آیات سجده',
+                body: 'چهارده آیه‌ای که تلاوتشان سجدهٔ تلاوت دارد با یک '
+                    'نشان طلایی کنار شمارهٔ آیه مشخص شده‌اند — بر اساس '
+                    'داده‌های Quran.com.',
+              ),
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            Reveal(
+              index: 11,
+              child: _card(
+                context,
+                icon: Icons.edit_note_rounded,
+                title: 'یادداشت‌های شخصی',
+                body: 'می‌توانید کنار هر آیه یادداشت خودتان را بنویسید. '
+                    'این یادداشت‌ها فقط روی همین دستگاه ذخیره می‌شوند و '
+                    'مثل نشان‌شده‌ها و پیشرفت، بین دستگاه‌ها همگام‌سازی '
+                    'نمی‌شوند.',
+              ),
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            Reveal(
+              index: 12,
+              child: _card(
+                context,
                 icon: Icons.block_flipped,
                 title: 'تعهد ما دربارهٔ تبلیغات',
                 body: 'حتی اگر در آینده تبلیغاتی به نسخهٔ رایگان اضافه '

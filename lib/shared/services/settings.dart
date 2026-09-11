@@ -152,6 +152,12 @@ class Settings extends ChangeNotifier {
   /// study aid, not the default reading experience.
   bool wordByWordEnabled = false;
 
+  /// Shows a Latin-script reading guide under each ayah (see
+  /// `shared/data/word_by_word.dart`'s `transliterationFor`) — for
+  /// someone who can follow along by ear but not yet read the Arabic
+  /// script itself. Off by default, same reasoning as [tajweedEnabled].
+  bool transliterationEnabled = false;
+
   Qari get qari => knownQaris.firstWhere((q) => q.id == qariId,
       orElse: () => knownQaris.first);
 
@@ -261,6 +267,12 @@ class Settings extends ChangeNotifier {
     _save();
   }
 
+  void setTransliterationEnabled(bool on) {
+    transliterationEnabled = on;
+    notifyListeners();
+    _save();
+  }
+
   /// Restores saved settings on this device. Called once at app boot.
   void restore() {
     final raw = LocalStore.get('settings');
@@ -289,6 +301,8 @@ class Settings extends ChangeNotifier {
       tajweedEnabled = s['tajweedEnabled'] as bool? ?? tajweedEnabled;
       useTranslation2 = s['useTranslation2'] as bool? ?? useTranslation2;
       wordByWordEnabled = s['wordByWordEnabled'] as bool? ?? wordByWordEnabled;
+      transliterationEnabled =
+          s['transliterationEnabled'] as bool? ?? transliterationEnabled;
     } on Object {
       // Corrupt local settings — keep defaults.
     }
@@ -314,6 +328,7 @@ class Settings extends ChangeNotifier {
         'tajweedEnabled': tajweedEnabled,
         'useTranslation2': useTranslation2,
         'wordByWordEnabled': wordByWordEnabled,
+        'transliterationEnabled': transliterationEnabled,
       }),
     );
   }

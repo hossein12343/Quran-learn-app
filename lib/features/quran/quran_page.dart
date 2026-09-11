@@ -2,12 +2,14 @@ import 'package:flutter/material.dart';
 import '../../core/motion/motion.dart';
 import '../../core/theme/app_theme.dart';
 import '../../shared/data/quran_seed.dart';
+import '../../shared/data/sajdah.dart';
 import '../../shared/data/tajweed_data.dart';
 import '../../shared/data/tajweed_parser.dart';
 import '../../shared/data/translation2.dart';
 import '../../shared/data/word_by_word.dart';
 import '../../shared/services/app_state.dart';
 import '../../shared/services/audio.dart';
+import '../../shared/services/ayah_notes.dart';
 import '../../shared/services/offline_audio.dart';
 import '../../shared/services/settings.dart';
 import '../../shared/services/share.dart';
@@ -427,9 +429,7 @@ class _SurahReaderPageState extends State<SurahReaderPage> {
         appBar: AppBar(
           title: Text(widget.surah.englishName),
           actions: [
-            _wordByWordToggle(context),
-            _translation2Toggle(context),
-            if (tajweedLoaded) _tajweedToggle(context),
+            _displayOptionsMenu(context),
             if (offlineAudio.available) _downloadAction(context),
           ],
         ),
@@ -489,18 +489,17 @@ class _SurahReaderPageState extends State<SurahReaderPage> {
     );
   }
 
-  bool _loadingWbw = false;
-
   /// Lazily loads word-by-word data on first use, same pattern as
   /// [_toggleTranslation2] — a study aid most sessions won't touch.
   /// Turning word-by-word on closes whatever word-meaning bubble was
   /// already open (stale index into a now-different rendering mode).
+  /// No loading-state flag here: the popup menu that calls this closes
+  /// itself immediately on tap, so there's no button left on screen to
+  /// show a spinner on — the reader just updates once the data lands.
   Future<void> _toggleWordByWord() async {
     if (!settings.wordByWordEnabled && !wordByWordLoaded) {
-      setState(() => _loadingWbw = true);
       await loadWordByWord();
       if (!mounted) return;
-      setState(() => _loadingWbw = false);
     }
     setState(() {
       _tappedWordAyah = null;
@@ -509,25 +508,17 @@ class _SurahReaderPageState extends State<SurahReaderPage> {
     settings.setWordByWordEnabled(!settings.wordByWordEnabled);
   }
 
-  Widget _wordByWordToggle(BuildContext context) {
-    final on = settings.wordByWordEnabled;
-    return IconButton(
-      tooltip: on ? 'خاموش‌کردن معنای واژه‌به‌واژه' : 'معنای واژه‌به‌واژه',
-      onPressed: _loadingWbw ? null : _toggleWordByWord,
-      icon: _loadingWbw
-          ? const SizedBox(
-              width: 18,
-              height: 18,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            )
-          : Icon(
-              Icons.touch_app_rounded,
-              color: on ? AppColors.primary : null,
-            ),
-    );
+  /// Shares the exact same lazy-loaded file as word-by-word (see
+  /// `word_by_word.dart`'s `transliterationFor`) — turning either
+  /// toggle on for the first time loads it, and the other toggle then
+  /// finds it already loaded.
+  Future<void> _toggleTransliteration() async {
+    if (!settings.transliterationEnabled && !wordByWordLoaded) {
+      await loadWordByWord();
+      if (!mounted) return;
+    }
+    settings.setTransliterationEnabled(!settings.transliterationEnabled);
   }
-
-  bool _loadingTranslation2 = false;
 
   /// Switches between the default translation and the second one (see
   /// `shared/data/translation2.dart`), lazily loading it on the very
@@ -535,44 +526,64 @@ class _SurahReaderPageState extends State<SurahReaderPage> {
   /// toggle, not something every session needs to pay the fetch for.
   Future<void> _toggleTranslation2() async {
     if (!settings.useTranslation2 && !translation2Loaded) {
-      setState(() => _loadingTranslation2 = true);
       await loadTranslation2();
       if (!mounted) return;
-      setState(() => _loadingTranslation2 = false);
     }
     settings.setUseTranslation2(!settings.useTranslation2);
   }
 
-  Widget _translation2Toggle(BuildContext context) {
-    final on = settings.useTranslation2;
-    return IconButton(
-      tooltip: on ? 'بازگشت به ترجمهٔ پیش‌فرض' : 'ترجمهٔ دیگر',
-      onPressed: _loadingTranslation2 ? null : _toggleTranslation2,
-      icon: _loadingTranslation2
-          ? const SizedBox(
-              width: 18,
-              height: 18,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            )
-          : Icon(
-              Icons.swap_horiz_rounded,
-              color: on ? AppColors.primary : null,
-            ),
-    );
-  }
-
-  /// Toggles rule-colored tajweed rendering for the whole reader — a
-  /// per-user preference (`settings.tajweedEnabled`), not per-surah state,
-  /// so it stays on/off consistently as someone moves between surahs.
-  Widget _tajweedToggle(BuildContext context) {
-    final on = settings.tajweedEnabled;
-    return IconButton(
-      tooltip: on ? 'خاموش‌کردن رنگ‌آمیزی تجوید' : 'رنگ‌آمیزی تجوید',
-      onPressed: () => settings.setTajweedEnabled(!on),
-      icon: Icon(
-        Icons.format_color_text_rounded,
-        color: on ? AppColors.primary : null,
-      ),
+  /// One menu instead of up to five separate app-bar icons — with
+  /// word-by-word and transliteration added on top of the existing
+  /// translation/tajweed toggles, five icons plus the back button
+  /// genuinely risks overflowing an app bar on a narrow phone. Each
+  /// item still routes through its own existing toggle function (so
+  /// the lazy-load-on-first-use behavior is unchanged); the menu
+  /// itself just closes immediately on tap rather than showing a
+  /// per-item spinner, since the load is quick enough that the
+  /// resulting UI change is the only feedback needed.
+  Widget _displayOptionsMenu(BuildContext context) {
+    final anyOn = settings.wordByWordEnabled ||
+        settings.transliterationEnabled ||
+        settings.useTranslation2 ||
+        settings.tajweedEnabled;
+    return PopupMenuButton<String>(
+      tooltip: 'گزینه‌های نمایش',
+      icon: Icon(Icons.tune_rounded, color: anyOn ? AppColors.primary : null),
+      onSelected: (value) {
+        switch (value) {
+          case 'wbw':
+            _toggleWordByWord();
+          case 'translit':
+            _toggleTransliteration();
+          case 'translation2':
+            _toggleTranslation2();
+          case 'tajweed':
+            settings.setTajweedEnabled(!settings.tajweedEnabled);
+        }
+      },
+      itemBuilder: (context) => [
+        CheckedPopupMenuItem<String>(
+          value: 'wbw',
+          checked: settings.wordByWordEnabled,
+          child: const Text('معنای واژه‌به‌واژه'),
+        ),
+        CheckedPopupMenuItem<String>(
+          value: 'translit',
+          checked: settings.transliterationEnabled,
+          child: const Text('راهنمای تلفظ لاتین'),
+        ),
+        CheckedPopupMenuItem<String>(
+          value: 'translation2',
+          checked: settings.useTranslation2,
+          child: const Text('ترجمهٔ دوم'),
+        ),
+        if (tajweedLoaded)
+          CheckedPopupMenuItem<String>(
+            value: 'tajweed',
+            checked: settings.tajweedEnabled,
+            child: const Text('رنگ‌آمیزی تجوید'),
+          ),
+      ],
     );
   }
 
@@ -706,6 +717,33 @@ class _SurahReaderPageState extends State<SurahReaderPage> {
                         fontWeight: FontWeight.w700,
                         color: AppColors.secondaryDark)),
               ),
+              if (isSajdahAyah(widget.surah.number, a.number)) ...[
+                const SizedBox(width: AppSpacing.sm),
+                Tooltip(
+                  message: 'آیهٔ سجده — سجدهٔ تلاوت دارد',
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: AppSpacing.sm, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: AppColors.goldLight,
+                      borderRadius: BorderRadius.circular(AppRadius.xs),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.self_improvement_rounded,
+                            size: 13, color: AppColors.gold),
+                        const SizedBox(width: 3),
+                        Text('سجده',
+                            style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.gold)),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
               const Spacer(),
               if (recitation.available)
                 Pressable(
@@ -762,6 +800,22 @@ class _SurahReaderPageState extends State<SurahReaderPage> {
                   ),
                 ),
               ),
+              const SizedBox(width: AppSpacing.md),
+              Pressable(
+                onTap: () => _editNote(a),
+                child: Padding(
+                  padding: const EdgeInsets.all(4),
+                  child: Icon(
+                    AyahNotes.has(widget.surah.number, a.number)
+                        ? Icons.edit_note_rounded
+                        : Icons.note_add_outlined,
+                    size: 22,
+                    color: AyahNotes.has(widget.surah.number, a.number)
+                        ? AppColors.primary
+                        : context.mutedColor,
+                  ),
+                ),
+              ),
             ],
           ),
           const SizedBox(height: AppSpacing.md),
@@ -769,6 +823,20 @@ class _SurahReaderPageState extends State<SurahReaderPage> {
             textDirection: TextDirection.rtl,
             child: _ayahText(context, a),
           ),
+          if (settings.transliterationEnabled &&
+              transliterationFor(widget.surah.number, a.number) != null) ...[
+            const SizedBox(height: AppSpacing.sm),
+            Directionality(
+              textDirection: TextDirection.ltr,
+              child: Text(
+                transliterationFor(widget.surah.number, a.number)!,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      fontStyle: FontStyle.italic,
+                      color: context.mutedColor,
+                    ),
+              ),
+            ),
+          ],
           const SizedBox(height: AppSpacing.md),
           Text(
             (settings.useTranslation2
@@ -781,9 +849,90 @@ class _SurahReaderPageState extends State<SurahReaderPage> {
             const SizedBox(height: AppSpacing.md),
             _tafsirPanel(context),
           ],
+          if (AyahNotes.has(widget.surah.number, a.number)) ...[
+            const SizedBox(height: AppSpacing.md),
+            _notePreview(context, a),
+          ],
         ],
       ),
     );
+  }
+
+  /// A saved note shows here unconditionally, not behind a toggle —
+  /// unlike tafsir/word-by-word (opt-in study aids someone might not
+  /// want cluttering every ayah), a note only ever exists because this
+  /// specific reader deliberately wrote it, so hiding it by default
+  /// would just mean re-opening the editor to see what they already
+  /// said.
+  Widget _notePreview(BuildContext context, Ayah a) {
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.md),
+      decoration: BoxDecoration(
+        color: AppColors.goldLight,
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        border: Border.all(color: AppColors.gold, width: 1),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.edit_note_rounded, size: 18, color: AppColors.gold),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: Text(
+              AyahNotes.get(widget.surah.number, a.number)!,
+              style: Theme.of(context)
+                  .textTheme
+                  .bodySmall
+                  ?.copyWith(color: AppColors.gold),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _editNote(Ayah a) async {
+    final controller = TextEditingController(
+      text: AyahNotes.get(widget.surah.number, a.number) ?? '',
+    );
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('یادداشت — آیهٔ ${a.number}'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          maxLines: 5,
+          minLines: 3,
+          decoration: const InputDecoration(
+            hintText: 'فکر یا یادداشت خودت دربارهٔ این آیه...',
+          ),
+        ),
+        actions: [
+          if (AyahNotes.has(widget.surah.number, a.number))
+            TextButton(
+              onPressed: () {
+                AyahNotes.set(widget.surah.number, a.number, '');
+                Navigator.of(dialogContext).pop(true);
+              },
+              child: const Text('حذف'),
+            ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('انصراف'),
+          ),
+          TextButton(
+            onPressed: () {
+              AyahNotes.set(widget.surah.number, a.number, controller.text);
+              Navigator.of(dialogContext).pop(true);
+            },
+            child: const Text('ذخیره'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (saved == true && mounted) setState(() {});
   }
 
   /// Which ayah's tafsir panel is expanded, if any — one at a time,

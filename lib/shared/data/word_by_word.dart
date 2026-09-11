@@ -11,8 +11,13 @@ import 'package:flutter/services.dart' show rootBundle;
 class WbwWord {
   final String arabic;
   final String translation;
+  final String transliteration;
 
-  const WbwWord({required this.arabic, required this.translation});
+  const WbwWord({
+    required this.arabic,
+    required this.translation,
+    required this.transliteration,
+  });
 }
 
 Map<int, Map<int, List<WbwWord>>> _wordByWord = {};
@@ -21,6 +26,19 @@ bool wordByWordLoaded = false;
 
 List<WbwWord>? wordByWordFor(int surahNumber, int ayahNumber) =>
     _wordByWord[surahNumber]?[ayahNumber];
+
+/// The whole ayah's Latin-script reading guide — just this same
+/// per-word data's own `transliteration` fields, joined with spaces.
+/// No separate fetch or asset: it rides along with the word-by-word
+/// data, so turning this feature on lazy-loads the exact same file.
+String? transliterationFor(int surahNumber, int ayahNumber) {
+  final words = wordByWordFor(surahNumber, ayahNumber);
+  if (words == null) return null;
+  return words
+      .map((w) => w.transliteration)
+      .where((t) => t.isNotEmpty)
+      .join(' ');
+}
 
 /// Loaded lazily on first toggle use, same reasoning as
 /// `translation2.dart`: a per-word study aid, not core reading data
@@ -50,6 +68,7 @@ Map<int, Map<int, List<WbwWord>>> _parseWordByWordJson(String raw) {
           WbwWord(
             arabic: (w as Map<String, dynamic>)['arabic'] as String,
             translation: w['translation'] as String,
+            transliteration: w['transliteration'] as String? ?? '',
           ),
       ];
     }
