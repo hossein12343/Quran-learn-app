@@ -46,6 +46,60 @@ void main() {
     });
   });
 
+  group('CircleMember.weeklyXp', () {
+    String currentWeekKey() {
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+      final sinceSaturday = (today.weekday + 1) % 7;
+      final saturday = today.subtract(Duration(days: sinceSaturday));
+      return '${saturday.year.toString().padLeft(4, '0')}-'
+          '${saturday.month.toString().padLeft(2, '0')}-'
+          '${saturday.day.toString().padLeft(2, '0')}';
+    }
+
+    test(
+        'is the totalXp/base delta when the stored week matches this '
+        'week', () {
+      final m = CircleMember.fromRow({
+        'user_id': 'u1',
+        'joined_at': '2026-09-01T00:00:00Z',
+        'profiles': {
+          'total_xp': 620,
+          'weekly_xp_base': 500,
+          'weekly_xp_week_start': currentWeekKey(),
+        },
+      });
+
+      expect(m.weeklyXp, 120);
+    });
+
+    test(
+        'is 0 when the stored week is stale (member has not played yet '
+        'this week) even though total_xp minus base would be nonzero', () {
+      final m = CircleMember.fromRow({
+        'user_id': 'u1',
+        'joined_at': '2026-09-01T00:00:00Z',
+        'profiles': {
+          'total_xp': 900,
+          'weekly_xp_base': 500,
+          'weekly_xp_week_start': '2000-01-01', // guaranteed a past week
+        },
+      });
+
+      expect(m.weeklyXp, 0);
+    });
+
+    test('is 0 when weekly_xp_week_start was never set', () {
+      final m = CircleMember.fromRow({
+        'user_id': 'u1',
+        'joined_at': '2026-09-01T00:00:00Z',
+        'profiles': {'total_xp': 900},
+      });
+
+      expect(m.weeklyXp, 0);
+    });
+  });
+
   group('JoinedCircle.fromRow', () {
     test('reads the embedded circle fields', () {
       final c = JoinedCircle.fromRow({

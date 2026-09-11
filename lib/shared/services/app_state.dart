@@ -30,6 +30,21 @@ class AppState extends ChangeNotifier {
   int currentStreak = 0;
   int longestStreak = 0;
 
+  /// [totalXp] as of the most recent weekly reset — [weeklyXp] is just the
+  /// delta since then. Resets in [recordSession] whenever a session lands
+  /// in a new Saturday-anchored week, not on a server-side timer — same
+  /// "only updates on real activity" philosophy as [lastActiveDate]/
+  /// [currentStreak] rather than a cron job. Powers the circles
+  /// leaderboard (see `shared/services/circles.dart`'s `CircleMember
+  /// .weeklyXp`, which resolves staleness the same way: a member who
+  /// hasn't had a session yet this week reads as 0, not a leftover number
+  /// from last week, by comparing [weeklyXpWeekStart] to the current key
+  /// rather than trusting whatever's in the column.
+  int weeklyXpBase = 0;
+  String? weeklyXpWeekStart;
+
+  int get weeklyXp => (totalXp - weeklyXpBase).clamp(0, 1 << 30);
+
   /// The highest streak-milestone celebration already shown on this
   /// device — see [pendingStreakMilestone]. Deliberately local-only
   /// (not synced to Supabase): losing it on a new device just means a
@@ -180,6 +195,17 @@ class AppState extends ChangeNotifier {
   static String ymdKey(DateTime d) => '${d.year.toString().padLeft(4, '0')}-'
       '${d.month.toString().padLeft(2, '0')}-'
       '${d.day.toString().padLeft(2, '0')}';
+
+  /// This Saturday's date key — the same anchor [thisWeek] already uses
+  /// for the home strip, factored out so [recordSession]'s weekly-XP
+  /// reset and `CircleMember`'s leaderboard both key off one definition
+  /// of "this week."
+  static String currentWeekKey() {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final sinceSaturday = (today.weekday + 1) % 7;
+    return ymdKey(today.subtract(Duration(days: sinceSaturday)));
+  }
 
   int _daysBetween(String a, String b) =>
       _parseYmd(b).difference(_parseYmd(a)).inDays;
@@ -750,6 +776,15 @@ class AppState extends ChangeNotifier {
       _ayatLearnedToday = 0;
       _lessonsToday = 0;
     }
+    // Same idea, one week wide: a new Saturday-anchored week rebases
+    // weeklyXp to 0 before this session's XP is added, so the addition
+    // below counts toward the new week, not gets folded into the old
+    // baseline.
+    final weekKey = currentWeekKey();
+    if (weeklyXpWeekStart != weekKey) {
+      weeklyXpBase = totalXp;
+      weeklyXpWeekStart = weekKey;
+    }
 
     final previous = _heldAyat[surahNumber] ?? const <int>{};
     final newlyHeld = heldIndicesNow.length - previous.length;
@@ -792,6 +827,8 @@ class AppState extends ChangeNotifier {
       'current_streak': currentStreak,
       'longest_streak': longestStreak,
       'last_active_date': lastActiveDate,
+      'weekly_xp_base': weeklyXpBase,
+      'weekly_xp_week_start': weeklyXpWeekStart,
     });
     if (_authToken != null && _userId != null) {
       unawaited(Backend.upsertSurahProgress(
@@ -896,6 +933,9 @@ class AppState extends ChangeNotifier {
     dailyGoalMinutes =
         (record['daily_goal_minutes'] as num?)?.toInt() ?? dailyGoalMinutes;
     _minutesToday = (record['minutes_today'] as num?)?.toInt() ?? _minutesToday;
+    weeklyXpBase = (record['weekly_xp_base'] as num?)?.toInt() ?? weeklyXpBase;
+    weeklyXpWeekStart =
+        record['weekly_xp_week_start'] as String? ?? weeklyXpWeekStart;
     final goal = record['learning_goal'] as String?;
     if (goal != null && goal.isNotEmpty) learningGoal = goal;
     isPro = record['is_pro'] as bool? ?? isPro;
@@ -915,6 +955,8 @@ class AppState extends ChangeNotifier {
       'lastActiveDate': lastActiveDate,
       'dailyGoalMinutes': dailyGoalMinutes,
       'minutesToday': _minutesToday,
+      'weeklyXpBase': weeklyXpBase,
+      'weeklyXpWeekStart': weeklyXpWeekStart,
       'ayatLearnedToday': _ayatLearnedToday,
       'lessonsToday': _lessonsToday,
       'activeDates': activeDates.toList(),
@@ -951,6 +993,9 @@ class AppState extends ChangeNotifier {
     dailyGoalMinutes =
         (snap['dailyGoalMinutes'] as num?)?.toInt() ?? dailyGoalMinutes;
     _minutesToday = (snap['minutesToday'] as num?)?.toInt() ?? _minutesToday;
+    weeklyXpBase = (snap['weeklyXpBase'] as num?)?.toInt() ?? weeklyXpBase;
+    weeklyXpWeekStart =
+        snap['weeklyXpWeekStart'] as String? ?? weeklyXpWeekStart;
     _ayatLearnedToday =
         (snap['ayatLearnedToday'] as num?)?.toInt() ?? _ayatLearnedToday;
     _lessonsToday = (snap['lessonsToday'] as num?)?.toInt() ?? _lessonsToday;

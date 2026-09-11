@@ -18,6 +18,8 @@ class CircleMember {
   final String? lastActiveDate;
   final bool isPro;
   final DateTime joinedAt;
+  final int weeklyXpBase;
+  final String? weeklyXpWeekStart;
 
   const CircleMember({
     required this.userId,
@@ -28,6 +30,8 @@ class CircleMember {
     required this.lastActiveDate,
     required this.isPro,
     required this.joinedAt,
+    required this.weeklyXpBase,
+    required this.weeklyXpWeekStart,
   });
 
   /// Same formula as `AppState.level` — kept as a one-line duplicate
@@ -35,6 +39,26 @@ class CircleMember {
   /// makes elsewhere for small, stable formulas (see `main.dart`'s
   /// `_dateKey`, also duplicated rather than shared).
   int get level => 1 + (totalXp ~/ 150);
+
+  /// XP earned since the last Saturday-anchored week reset — 0 if
+  /// [weeklyXpWeekStart] doesn't match *this* week, which is exactly the
+  /// "hasn't played yet this week" case: staleness resolves client-side
+  /// by comparing week keys rather than trusting a possibly-weeks-old
+  /// column value. Same reset semantics as `AppState.weeklyXp`, just
+  /// computed for someone else's profile row instead of your own.
+  int get weeklyXp => weeklyXpWeekStart == _currentWeekKey()
+      ? (totalXp - weeklyXpBase).clamp(0, 1 << 30)
+      : 0;
+
+  static String _currentWeekKey() {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final sinceSaturday = (today.weekday + 1) % 7;
+    final saturday = today.subtract(Duration(days: sinceSaturday));
+    return '${saturday.year.toString().padLeft(4, '0')}-'
+        '${saturday.month.toString().padLeft(2, '0')}-'
+        '${saturday.day.toString().padLeft(2, '0')}';
+  }
 
   factory CircleMember.fromRow(Map<String, dynamic> row) {
     final p = row['profiles'] as Map<String, dynamic>? ?? const {};
@@ -48,6 +72,8 @@ class CircleMember {
       lastActiveDate: p['last_active_date'] as String?,
       isPro: p['is_pro'] as bool? ?? false,
       joinedAt: DateTime.parse(row['joined_at'] as String),
+      weeklyXpBase: (p['weekly_xp_base'] as num?)?.toInt() ?? 0,
+      weeklyXpWeekStart: p['weekly_xp_week_start'] as String?,
     );
   }
 }

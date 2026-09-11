@@ -360,7 +360,8 @@ class Backend {
       'GET',
       '$baseUrl/rest/v1/circle_members?circle_id=eq.$circleId'
           '&select=user_id,joined_at,profiles(display_name,total_xp,'
-          'current_streak,longest_streak,last_active_date,is_pro)',
+          'current_streak,longest_streak,last_active_date,is_pro,'
+          'weekly_xp_base,weekly_xp_week_start)',
       headers: _headers(token),
     );
     if (!res.ok) throw _pgException(res.body);

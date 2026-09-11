@@ -207,6 +207,13 @@ class _CirclesPageState extends State<CirclesPage> {
         const SizedBox(height: AppSpacing.lg),
         Text('اعضا (${circles.members.length})',
             style: Theme.of(context).textTheme.titleSmall),
+        if (circles.members.isNotEmpty) ...[
+          const SizedBox(height: 2),
+          Text(
+            'رتبه‌بندی بر اساس امتیاز این هفته — هر شنبه از نو شروع می‌شود.',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ],
         const SizedBox(height: AppSpacing.sm),
         if (circles.loading && circles.members.isEmpty)
           const Padding(
@@ -220,19 +227,56 @@ class _CirclesPageState extends State<CirclesPage> {
                 style: Theme.of(context).textTheme.bodySmall),
           )
         else
-          ...circles.members.map((m) => Padding(
+          ..._rankedMembers().map((entry) => Padding(
                 padding: const EdgeInsets.only(bottom: AppSpacing.md),
-                child: _memberCard(context, m),
+                child: _memberCard(context, entry.$1, entry.$2),
               )),
       ],
     );
   }
 
-  Widget _memberCard(BuildContext context, CircleMember m) {
+  /// Sorted by this week's XP, highest first — ties keep their original
+  /// (join) order rather than reshuffling. Rank is only meaningful (and
+  /// only shown as a medal) for the top 3 *with actual XP this week*: a
+  /// member who hasn't played yet shouldn't be badged "#2" just because
+  /// two other people also have 0.
+  List<(CircleMember, int?)> _rankedMembers() {
+    final sorted = [...circles.members]
+      ..sort((a, b) => b.weeklyXp.compareTo(a.weeklyXp));
+    return List.generate(sorted.length, (i) {
+      final rank = i < 3 && sorted[i].weeklyXp > 0 ? i + 1 : null;
+      return (sorted[i], rank);
+    });
+  }
+
+  static const List<Color> _medalColors = [
+    AppColors.gold,
+    Color(0xFFA8A8B3),
+    Color(0xFFC08A56),
+  ];
+
+  Widget _memberCard(BuildContext context, CircleMember m, int? rank) {
     return _card(
       context,
       child: Row(
         children: [
+          if (rank != null) ...[
+            Container(
+              width: 26,
+              height: 26,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: _medalColors[rank - 1],
+                shape: BoxShape.circle,
+              ),
+              child: Text('$rank',
+                  style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.white)),
+            ),
+            const SizedBox(width: AppSpacing.md),
+          ],
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -260,6 +304,19 @@ class _CirclesPageState extends State<CirclesPage> {
                 ),
               ],
             ),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.sm, vertical: 4),
+            decoration: BoxDecoration(
+              color: AppColors.primaryLight,
+              borderRadius: BorderRadius.circular(AppRadius.xs),
+            ),
+            child: Text('${m.weeklyXp} XP',
+                style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.primaryDeep)),
           ),
           IconButton(
             tooltip: 'حذف از حلقه',

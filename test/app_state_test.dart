@@ -21,7 +21,9 @@ void main() {
       ..lastActiveDate = null
       ..dailyGoalMinutes = 10
       ..quizzesTaken = 0
-      ..quizzesPassed = 0;
+      ..quizzesPassed = 0
+      ..weeklyXpBase = 0
+      ..weeklyXpWeekStart = null;
     appState.sealed.clear();
     appState.sealedLevels.clear();
     appState.bookmarks.clear();
@@ -44,15 +46,17 @@ void main() {
     expect(appState.heldIndices(112), {0, 1});
   });
 
-  test('recordSession only awards XP for the increase, not the whole set',
-      () {
+  test('recordSession only awards XP for the increase, not the whole set', () {
     // A surah untouched by any other test — _heldAyat is private state that
     // persists on the AppState singleton across tests, so reusing a surah
     // number another test already wrote to would carry over its count.
     appState.recordSession(
         surahNumber: 113, heldIndicesNow: {0}, didSeal: false, minutes: 1);
     appState.recordSession(
-        surahNumber: 113, heldIndicesNow: {0, 1, 2}, didSeal: false, minutes: 1);
+        surahNumber: 113,
+        heldIndicesNow: {0, 1, 2},
+        didSeal: false,
+        minutes: 1);
     // 1 ayah then +2 more = 3 total newly-held increments, 12 XP each.
     expect(appState.totalXp, 3 * 12);
   });
@@ -69,7 +73,8 @@ void main() {
     expect(appState.quizzesPassed, 1);
   });
 
-  test('toggleBookmark adds and then removes locally with no backend', () async {
+  test('toggleBookmark adds and then removes locally with no backend',
+      () async {
     expect(appState.isBookmarked(1, 1), isFalse);
     await appState.toggleBookmark(1, 1);
     expect(appState.isBookmarked(1, 1), isTrue);
@@ -84,7 +89,8 @@ void main() {
     expect(appState.isUnlocked(1), isTrue);
   });
 
-  test('a level chains through the levels of one surah, independent of the '
+  test(
+      'a level chains through the levels of one surah, independent of the '
       'main path, once the surah itself is unlocked', () {
     final fake = Surah(
       number: 9050,
@@ -105,7 +111,8 @@ void main() {
     expect(appState.nextChunkFor(fake), 1);
   });
 
-  test('recordSession seals a level, awards its bonus once, and unlocks the next',
+  test(
+      'recordSession seals a level, awards its bonus once, and unlocks the next',
       () {
     final fake = Surah(
       number: 9051,
@@ -156,7 +163,8 @@ void main() {
     expect(appState.dueForReview, isEmpty); // not due until tomorrow
   });
 
-  test('a level that took real struggle to build starts with a lower ease '
+  test(
+      'a level that took real struggle to build starts with a lower ease '
       'than one learned clean', () {
     appState.recordSession(
       surahNumber: 112,
@@ -174,7 +182,8 @@ void main() {
     expect(appState.reviewInterval[key], 1);
   });
 
-  test('SM-2: clean reviews grow the gap and the ease; a lapse trims both '
+  test(
+      'SM-2: clean reviews grow the gap and the ease; a lapse trims both '
       'without a full reset', () {
     appState.recordSession(
       surahNumber: 112,
@@ -226,7 +235,8 @@ void main() {
     expect(appState.reviewEase[key], lessThan(grownEase));
   });
 
-  test('a pre-SM-2 sealed level (rep count only) migrates onto the new '
+  test(
+      'a pre-SM-2 sealed level (rep count only) migrates onto the new '
       'scheduler without losing its place', () {
     final key = appState.levelKey(113, 0);
     // Simulate a snapshot from before reviewEase/reviewInterval existed.
@@ -265,10 +275,7 @@ void main() {
       appState.lastActiveDate =
           ymd(DateTime.now().subtract(const Duration(days: 1)));
       appState.recordSession(
-          surahNumber: 402,
-          heldIndicesNow: {0, 1},
-          didSeal: false,
-          minutes: 4);
+          surahNumber: 402, heldIndicesNow: {0, 1}, didSeal: false, minutes: 4);
       expect(appState.minutesToday, 4);
       expect(appState.ayatLearnedToday, 2);
       expect(appState.lessonsToday, 1);
@@ -326,6 +333,48 @@ void main() {
     });
   });
 
+  group('weekly XP', () {
+    test(
+        'a fresh account (no weekly reset yet) starts weeklyXp at exactly '
+        'this session\'s XP, not total_xp', () {
+      appState.totalXp = 500; // e.g. carried over from a remote profile load
+      appState.recordSession(
+          surahNumber: 301, heldIndicesNow: {0}, didSeal: false, minutes: 1);
+      // +12 XP for the one newly-held ayah, and the reset baselines to the
+      // pre-session total (500), so weeklyXp reads only this session's gain.
+      expect(appState.weeklyXp, 12);
+    });
+
+    test(
+        'a second session the same week accumulates onto the same '
+        'baseline instead of resetting again', () {
+      // A distinct surah number from the test above — `_heldAyat` is
+      // singleton state setUp() doesn't reset, so reusing one would make
+      // this session's "newly held" delta silently come out 0.
+      appState.recordSession(
+          surahNumber: 302, heldIndicesNow: {0}, didSeal: false, minutes: 1);
+      final weekAfterFirst = appState.weeklyXpWeekStart;
+      appState.recordSession(
+          surahNumber: 302, heldIndicesNow: {0, 1}, didSeal: false, minutes: 1);
+
+      expect(appState.weeklyXpWeekStart, weekAfterFirst); // same week key
+      expect(appState.weeklyXp, 24); // 2 sessions * 12 XP, not just the last
+    });
+
+    test(
+        'a stale week key from a previous week gets rebased before this '
+        "session's XP is added, so old weeks don't leak into the new one", () {
+      appState.totalXp = 300;
+      appState.weeklyXpBase = 0; // as if 300 XP had piled up over old weeks
+      appState.weeklyXpWeekStart = '2000-01-01'; // guaranteed stale
+      appState.recordSession(
+          surahNumber: 303, heldIndicesNow: {0}, didSeal: false, minutes: 1);
+
+      expect(appState.weeklyXpWeekStart, isNot('2000-01-01'));
+      expect(appState.weeklyXp, 12); // only this session's gain, not 300+12
+    });
+  });
+
   group('streak', () {
     test('first session ever starts the streak at 1', () {
       appState.recordSession(
@@ -338,10 +387,7 @@ void main() {
       appState.recordSession(
           surahNumber: 202, heldIndicesNow: {0}, didSeal: false, minutes: 1);
       appState.recordSession(
-          surahNumber: 202,
-          heldIndicesNow: {0, 1},
-          didSeal: false,
-          minutes: 1);
+          surahNumber: 202, heldIndicesNow: {0, 1}, didSeal: false, minutes: 1);
       expect(appState.currentStreak, 1);
     });
 
