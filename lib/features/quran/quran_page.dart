@@ -8,11 +8,28 @@ import '../../shared/services/app_state.dart';
 import '../../shared/services/audio.dart';
 import '../../shared/services/offline_audio.dart';
 import '../../shared/services/settings.dart';
+import '../../shared/services/share.dart';
 import '../../shared/services/store/local_store.dart';
 import 'bookmarks_page.dart';
 import 'khatm_page.dart';
 import 'mushaf_page_view.dart';
 import 'verse_search_page.dart';
+
+/// The text put on the clipboard / into the native share sheet for one
+/// ayah — pure and standalone so it's unit-testable without a widget
+/// tree. Arabic first (the actual content), translation, then a plain
+/// reference line; deliberately no link back to the app (it has no
+/// public per-ayah deep link to share yet), so the shared text still
+/// stands alone and means something to whoever receives it.
+String composeShareText({
+  required String englishName,
+  required String arabicName,
+  required int ayahNumber,
+  required String arabic,
+  required String translation,
+}) =>
+    '$arabic\n\n$translation\n\n— سورهٔ $englishName ($arabicName)، آیهٔ '
+    '$ayahNumber';
 
 /// Which (reciter, surah) pairs have been downloaded for offline playback
 /// — a flat set persisted locally, `"qariId:surahNumber"` per entry.
@@ -492,6 +509,30 @@ class _SurahReaderPageState extends State<SurahReaderPage> {
     return Text.rich(TextSpan(children: parseTajweed(raw, style)));
   }
 
+  /// Native share sheet where the browser has one; otherwise a clipboard
+  /// copy with a snackbar, since silently doing nothing on a tap would
+  /// be worse than either.
+  Future<void> _shareAyah(Ayah a) async {
+    final text = composeShareText(
+      englishName: widget.surah.englishName,
+      arabicName: widget.surah.arabicName,
+      ayahNumber: a.number,
+      arabic: a.arabic,
+      translation: a.translation,
+    );
+    final shared = shareService.canShare
+        ? await shareService.share(text: text, title: 'یادگیری قرآن')
+        : false;
+    if (shared || !mounted) return;
+    final copied = await shareService.copyToClipboard(text);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(copied ? 'متن آیه کپی شد.' : 'اشتراک‌گذاری انجام نشد.'),
+      ),
+    );
+  }
+
   Widget _ayahCard(Ayah a, int i) {
     final bookmarked = appState.isBookmarked(widget.surah.number, a.number);
     final sounding = _running && _current == a.number;
@@ -561,6 +602,17 @@ class _SurahReaderPageState extends State<SurahReaderPage> {
                   ),
                 ),
               ),
+              if (shareService is! UnavailableShare) ...[
+                const SizedBox(width: AppSpacing.md),
+                Pressable(
+                  onTap: () => _shareAyah(a),
+                  child: Padding(
+                    padding: const EdgeInsets.all(4),
+                    child: Icon(Icons.share_rounded,
+                        size: 22, color: context.mutedColor),
+                  ),
+                ),
+              ],
             ],
           ),
           const SizedBox(height: AppSpacing.md),
