@@ -182,8 +182,21 @@ abstract class ReviewSchedule {
   /// rep count but no stored interval/ease).
   static const List<int> legacyLadder = <int>[4, 7, 14, 30, 60, 90];
 
-  static ReviewState onFirstSeal() =>
-      const ReviewState(reps: 1, ease: startEase, intervalDays: 1);
+  /// [lapses] is how many times, total, any ayah in this level was gotten
+  /// wrong while it was being *built* (drills) and *gated* (the final
+  /// blind recall) this session — see `MemoryItem.lapses` in
+  /// quiz_engine.dart, summed over the level's ayat by the caller. A level
+  /// that took real struggle to learn starts its review schedule on a
+  /// lower ease than one learned clean, so it settles into shorter,
+  /// tighter review gaps sooner — real per-ayah error history shaping the
+  /// schedule, not just whether *reviews* later go clean.  Capped at 10
+  /// lapses' worth of penalty so one unusually rough level doesn't sink
+  /// below the same floor a repeated review lapse would.
+  static ReviewState onFirstSeal({int lapses = 0}) {
+    final ease =
+        (startEase - lapses.clamp(0, 10) * 0.05).clamp(_minEase, _maxEase);
+    return ReviewState(reps: 1, ease: ease, intervalDays: 1);
+  }
 
   static ReviewState onReview(ReviewState s, {required bool clean}) {
     if (clean) {

@@ -285,6 +285,14 @@ class _QuizPageState extends State<QuizPage> {
 
   void _commitProgress({required bool didSeal, int? sealedChunk}) {
     final minutes = DateTime.now().difference(_startedAt).inMinutes;
+    // Every ayah in *this* level's own lapse count, so a level that took
+    // real struggle to build starts its review schedule tighter than one
+    // learned clean — see ReviewSchedule.onFirstSeal's doc comment. Each
+    // Session plays exactly one level (singleLevel), so chunkStart/
+    // chunkEnd bound the same ayat for the session's whole lifetime.
+    final levelLapses = _s.items
+        .sublist(_s.chunkStart, _s.chunkEnd)
+        .fold<int>(0, (sum, i) => sum + i.lapses);
     appState.recordSession(
       surahNumber: widget.surah.number,
       heldIndicesNow:
@@ -292,6 +300,7 @@ class _QuizPageState extends State<QuizPage> {
       didSeal: didSeal,
       sealedChunk: sealedChunk,
       hadMistakes: _s.mistakes > 0,
+      levelLapses: levelLapses,
       minutes: minutes < 1 ? 1 : minutes,
     );
   }

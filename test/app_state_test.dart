@@ -152,7 +152,26 @@ void main() {
     final key = appState.levelKey(1, 0);
     expect(appState.reviewInterval[key], 1);
     expect(appState.reviewCleanRecalls[key], 1);
+    expect(appState.reviewEase[key], ReviewSchedule.startEase); // no lapses
     expect(appState.dueForReview, isEmpty); // not due until tomorrow
+  });
+
+  test('a level that took real struggle to build starts with a lower ease '
+      'than one learned clean', () {
+    appState.recordSession(
+      surahNumber: 112,
+      heldIndicesNow: {0, 1, 2, 3},
+      didSeal: true,
+      sealedChunk: 0,
+      levelLapses: 6,
+      minutes: 3,
+    );
+    final key = appState.levelKey(112, 0);
+    expect(appState.reviewEase[key], lessThan(ReviewSchedule.startEase));
+
+    // Both start with the same 1-day interval regardless — the penalty is
+    // to how fast the gap grows afterward, not the very first review.
+    expect(appState.reviewInterval[key], 1);
   });
 
   test('SM-2: clean reviews grow the gap and the ease; a lapse trims both '

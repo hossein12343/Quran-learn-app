@@ -218,9 +218,20 @@ class QuranLearnApp extends StatelessWidget {
           // now actually flips the whole app's chrome (nav order, text
           // alignment, icon positions), not just the Settings page (the
           // only screen that used to override this itself).
-          builder: (context, child) => Directionality(
-            textDirection: settings.direction,
-            child: child!,
+          // Wraps every screen once at the root rather than touching each
+          // one — settings.uiTextScale (see settings_page.dart's "اندازهٔ
+          // متن رابط کاربری") scales all the Persian UI text (labels,
+          // buttons, settings copy) the same way arabicScale already
+          // scaled the ayah itself, so both ends of this app's age range
+          // get a real lever, not just readers of the Arabic text.
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context).copyWith(
+              textScaler: TextScaler.linear(settings.uiTextScale),
+            ),
+            child: Directionality(
+              textDirection: settings.direction,
+              child: child!,
+            ),
           ),
           initialRoute: '/splash',
           routes: <String, WidgetBuilder>{

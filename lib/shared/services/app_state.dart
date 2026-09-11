@@ -726,6 +726,7 @@ class AppState extends ChangeNotifier {
     required bool didSeal,
     int? sealedChunk,
     bool hadMistakes = false,
+    int levelLapses = 0,
     required int minutes,
   }) {
     // New calendar day since the last session → today's counters start
@@ -751,7 +752,7 @@ class AppState extends ChangeNotifier {
       // this level's ease and nudges the ease up; a lapse shrinks both but
       // keeps most of what the level earned. See [ReviewSchedule].
       final next = firstTime
-          ? ReviewSchedule.onFirstSeal()
+          ? ReviewSchedule.onFirstSeal(lapses: levelLapses)
           : ReviewSchedule.onReview(_reviewStateFor(key), clean: !hadMistakes);
       reviewCleanRecalls[key] = next.reps;
       reviewEase[key] = next.ease;

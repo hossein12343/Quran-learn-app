@@ -125,6 +125,16 @@ class Settings extends ChangeNotifier {
   /// never break: 0.85 (small) .. 1.35 (large).
   double arabicScale = 1.0;
 
+  /// Multiplies every *other* piece of text — Persian UI labels, buttons,
+  /// settings copy — via a `TextScaler` at the app's root (see
+  /// `QuranLearnApp`'s `builder` in main.dart), not per-widget. This
+  /// app's audience skews older at one end (a parent or grandparent doing
+  /// hifz alongside their kids) and younger at the other; `arabicScale`
+  /// alone only helped the ayah itself read bigger, not the menus and
+  /// buttons around it. Same conservative range as arabicScale, for the
+  /// same reason — layouts stop being tested past it.
+  double uiTextScale = 1.0;
+
   Qari get qari =>
       knownQaris.firstWhere((q) => q.id == qariId, orElse: () => knownQaris.first);
 
@@ -211,6 +221,12 @@ class Settings extends ChangeNotifier {
     _save();
   }
 
+  void setUiTextScale(double v) {
+    uiTextScale = v.clamp(0.85, 1.35);
+    notifyListeners();
+    _save();
+  }
+
   /// Restores saved settings on this device. Called once at app boot.
   void restore() {
     final raw = LocalStore.get('settings');
@@ -235,6 +251,7 @@ class Settings extends ChangeNotifier {
       reminderOffsetMinutes =
           (s['reminderOffsetMinutes'] as num?)?.toInt() ?? reminderOffsetMinutes;
       arabicScale = (s['arabicScale'] as num?)?.toDouble() ?? arabicScale;
+      uiTextScale = (s['uiTextScale'] as num?)?.toDouble() ?? uiTextScale;
     } on Object {
       // Corrupt local settings — keep defaults.
     }
@@ -256,6 +273,7 @@ class Settings extends ChangeNotifier {
         'reminderPrayer': reminderPrayer.index,
         'reminderOffsetMinutes': reminderOffsetMinutes,
         'arabicScale': arabicScale,
+        'uiTextScale': uiTextScale,
       }),
     );
   }

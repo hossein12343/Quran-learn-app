@@ -11,6 +11,7 @@ import '../../shared/services/recite_check.dart';
 import '../../shared/services/reminders.dart';
 import '../../shared/services/settings.dart';
 import '../profile/pro_page.dart';
+import 'about_page.dart';
 
 class SettingsPage extends StatelessWidget {
   const SettingsPage({super.key});
@@ -44,6 +45,8 @@ class SettingsPage extends StatelessWidget {
               Reveal(index: 5, child: _reminderSection(context)),
               const SizedBox(height: AppSpacing.xl),
               Reveal(index: 6, child: _capabilityNotice(context)),
+              const SizedBox(height: AppSpacing.xl),
+              Reveal(index: 7, child: _aboutLink(context)),
             ],
           ),
         ),
@@ -307,6 +310,27 @@ class SettingsPage extends StatelessWidget {
             activeColor: AppColors.primary,
             label: '${(settings.arabicScale * 100).round()}%',
             onChanged: (v) => settings.setArabicScale(v),
+          ),
+          const Divider(height: AppSpacing.xxl),
+          Text('اندازهٔ متن رابط کاربری',
+              style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: AppSpacing.xs),
+          Text(
+            'اندازهٔ همهٔ متن‌های فارسیِ برنامه — دکمه‌ها، منوها، متن '
+            'تنظیمات — را تغییر می‌دهد.',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          Text('نمونه: دکمه، منو، متن تنظیمات',
+              style: Theme.of(context).textTheme.bodyLarge),
+          Slider(
+            value: settings.uiTextScale,
+            min: 0.85,
+            max: 1.35,
+            divisions: 10,
+            activeColor: AppColors.primary,
+            label: '${(settings.uiTextScale * 100).round()}%',
+            onChanged: (v) => settings.setUiTextScale(v),
           ),
         ],
       ),
@@ -678,6 +702,27 @@ class SettingsPage extends StatelessWidget {
             'شده و به‌محض نصب آن‌ها فعال می‌شوند.',
             style: Theme.of(context).textTheme.bodySmall,
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _aboutLink(BuildContext context) {
+    return Pressable(
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute<void>(builder: (_) => const AboutPage()),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.info_outline_rounded, size: 18, color: context.mutedColor),
+          const SizedBox(width: AppSpacing.sm),
+          Text('دربارهٔ متن، ترجمه و قاریان',
+              style: Theme.of(context)
+                  .textTheme
+                  .labelLarge
+                  ?.copyWith(color: context.mutedColor)),
+          const Spacer(),
+          Icon(Icons.chevron_left_rounded, size: 20, color: context.mutedColor),
         ],
       ),
     );
