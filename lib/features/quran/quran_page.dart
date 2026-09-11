@@ -8,6 +8,7 @@ import '../../shared/services/offline_audio.dart';
 import '../../shared/services/settings.dart';
 import '../../shared/services/store/local_store.dart';
 import 'bookmarks_page.dart';
+import 'khatm_page.dart';
 
 /// Which (reciter, surah) pairs have been downloaded for offline playback
 /// — a flat set persisted locally, `"qariId:surahNumber"` per entry.
@@ -68,6 +69,13 @@ class _QuranPageState extends State<QuranPage> {
         title: const Text('قرآن'),
         actions: [
           IconButton(
+            icon: const Icon(Icons.checklist_rounded),
+            tooltip: 'ختم رمضان',
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(builder: (_) => const KhatmPage()),
+            ),
+          ),
+          IconButton(
             icon: const Icon(Icons.star_rounded),
             tooltip: 'نشان‌شده‌ها',
             onPressed: () => Navigator.of(context).push(
@@ -96,8 +104,8 @@ class _QuranPageState extends State<QuranPage> {
                         style: Theme.of(context).textTheme.bodyMedium),
                   )
                 : ListView.builder(
-                    padding: const EdgeInsets.fromLTRB(AppSpacing.xl, 0,
-                        AppSpacing.xl, AppSpacing.xxxl),
+                    padding: const EdgeInsets.fromLTRB(
+                        AppSpacing.xl, 0, AppSpacing.xl, AppSpacing.xxxl),
                     itemCount: list.length,
                     itemBuilder: (context, i) => Reveal(
                       index: i,
@@ -328,8 +336,8 @@ class _SurahReaderPageState extends State<SurahReaderPage> {
         ),
         body: ListView.builder(
           controller: _sc,
-          padding: EdgeInsets.fromLTRB(AppSpacing.xl, 0, AppSpacing.xl,
-              _running ? 96 : AppSpacing.xxxl),
+          padding: EdgeInsets.fromLTRB(
+              AppSpacing.xl, 0, AppSpacing.xl, _running ? 96 : AppSpacing.xxxl),
           itemCount: widget.surah.ayat.length,
           itemBuilder: (context, i) => _ayahCard(widget.surah.ayat[i], i),
         ),
@@ -368,12 +376,10 @@ class _SurahReaderPageState extends State<SurahReaderPage> {
         ),
       );
     }
-    final downloaded =
-        _OfflineSurahs.has(settings.qariId, widget.surah.number);
+    final downloaded = _OfflineSurahs.has(settings.qariId, widget.surah.number);
     return IconButton(
-      tooltip: downloaded
-          ? 'حذف نسخهٔ آفلاین'
-          : 'دانلود این سوره برای پخش آفلاین',
+      tooltip:
+          downloaded ? 'حذف نسخهٔ آفلاین' : 'دانلود این سوره برای پخش آفلاین',
       onPressed: downloaded ? _removeDownload : _download,
       icon: Icon(
         downloaded
@@ -420,8 +426,7 @@ class _SurahReaderPageState extends State<SurahReaderPage> {
               const Spacer(),
               if (recitation.available)
                 Pressable(
-                  onTap: () =>
-                      sounding ? _stop() : _startFrom(a.number),
+                  onTap: () => sounding ? _stop() : _startFrom(a.number),
                   child: Padding(
                     padding: const EdgeInsets.all(4),
                     child: Icon(
@@ -463,8 +468,7 @@ class _SurahReaderPageState extends State<SurahReaderPage> {
             ),
           ),
           const SizedBox(height: AppSpacing.md),
-          Text(a.translation,
-              style: Theme.of(context).textTheme.bodyMedium),
+          Text(a.translation, style: Theme.of(context).textTheme.bodyMedium),
         ],
       ),
     );
