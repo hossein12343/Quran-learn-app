@@ -23,6 +23,15 @@ abstract class RecitationPlayer {
   Future<void> stop();
   Future<void> setSpeed(double speed);
 
+  /// Plays an arbitrary short clip by URL — used for a single word's
+  /// own audio (see `shared/data/word_by_word.dart`'s `wordAudioUrl`),
+  /// not a full ayah. Bypasses [play]'s surah/ayah/qari-specific
+  /// logic entirely (no bismillah-skip, no offline-cache resolution).
+  /// Shares the same underlying audio channel as [play] — starting
+  /// this supersedes any in-progress ayah playback and vice versa,
+  /// same one-audio-channel behavior as everywhere else in this app.
+  Future<void> playClip(String url);
+
   /// Emits true while a clip is playing.
   ValueListenable<bool> get isPlaying;
 
@@ -71,6 +80,11 @@ class SilentPlayer implements RecitationPlayer {
 
   @override
   Future<void> setSpeed(double speed) async {}
+
+  @override
+  Future<void> playClip(String url) async {
+    debugPrint('audio stub: clip $url');
+  }
 
   @override
   void warmUp() {}

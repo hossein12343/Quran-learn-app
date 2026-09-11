@@ -155,6 +155,20 @@ class WebAudioPlayer implements RecitationPlayer {
     _el.playbackRate = speed;
   }
 
+  @override
+  Future<void> playClip(String url) async {
+    final token = ++_playToken;
+    _el
+      ..src = url
+      ..playbackRate = 1.0;
+    try {
+      await _el.play();
+    } on Object catch (e) {
+      if (token != _playToken) return; // superseded — see play()'s own note
+      AppLog.warn('Word clip playback failed', error: e, context: {'url': url});
+    }
+  }
+
   bool _warmupHooked = false;
 
   @override

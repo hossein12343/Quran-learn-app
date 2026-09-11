@@ -646,7 +646,21 @@ class _SurahReaderPageState extends State<SurahReaderPage> {
                 if (_tappedWordAyah == ayahNumber && _tappedWordIndex == i)
                   Padding(
                     padding: const EdgeInsets.only(top: 2),
-                    child: Text(words[i].translation, style: translationStyle),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(words[i].translation, style: translationStyle),
+                        if (recitation.available) ...[
+                          const SizedBox(width: 4),
+                          GestureDetector(
+                            onTap: () => recitation.playClip(wordAudioUrl(
+                                widget.surah.number, ayahNumber, i + 1)),
+                            child: Icon(Icons.volume_up_rounded,
+                                size: 15, color: AppColors.primary),
+                          ),
+                        ],
+                      ],
+                    ),
                   ),
               ],
             ),

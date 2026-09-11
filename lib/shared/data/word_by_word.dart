@@ -20,6 +20,23 @@ class WbwWord {
   });
 }
 
+/// Builds a single word's own audio clip URL — a separate, much
+/// smaller per-word clip set from the Quran.com word-by-word CDN, not
+/// the everyayah.com reciter audio the rest of this app plays.
+/// Deterministic from (surah, ayah, 1-based word position): confirmed
+/// against the live API's own `audio_url` field for several
+/// surah/ayah pairs (including a double-digit surah/ayah, to rule out
+/// a padding-width fluke) before trusting the pattern, so nothing
+/// here needs to be stored in assets/quran_wbw.json — `position` is
+/// just `wordByWordFor(...)`'s list index + 1, since the one filtered-
+/// out "end" marker per ayah (see fetch_word_by_word.py) always comes
+/// after every real word, never between them.
+String wordAudioUrl(int surahNumber, int ayahNumber, int position) {
+  String pad3(int n) => n.toString().padLeft(3, '0');
+  return 'https://audio.qurancdn.com/wbw/'
+      '${pad3(surahNumber)}_${pad3(ayahNumber)}_${pad3(position)}.mp3';
+}
+
 Map<int, Map<int, List<WbwWord>>> _wordByWord = {};
 
 bool wordByWordLoaded = false;
