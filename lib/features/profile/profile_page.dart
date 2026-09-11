@@ -3,6 +3,7 @@ import '../../core/motion/motion.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/pattern_overlay.dart';
 import '../../shared/services/app_state.dart';
+import '../learn/hifz_plan_page.dart';
 import '../learn/memorized_page.dart';
 import '../progress/achievements_page.dart';
 import '../quran/asma_al_husna_page.dart';
@@ -119,6 +120,12 @@ class ProfilePage extends StatelessWidget {
           Reveal(
             index: 2,
             child: _section(context, 'کتابخانه شما', [
+              _navRow(
+                  context,
+                  Icons.flag_rounded,
+                  'برنامهٔ حفظ',
+                  () => Navigator.of(context).push(MaterialPageRoute<void>(
+                      builder: (_) => const HifzPlanPage()))),
               _navRow(
                   context,
                   Icons.auto_stories_rounded,
