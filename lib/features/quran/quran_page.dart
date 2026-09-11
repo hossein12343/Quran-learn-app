@@ -4,8 +4,42 @@ import '../../core/theme/app_theme.dart';
 import '../../shared/data/quran_seed.dart';
 import '../../shared/services/app_state.dart';
 import '../../shared/services/audio.dart';
+import '../../shared/services/offline_audio.dart';
 import '../../shared/services/settings.dart';
+import '../../shared/services/store/local_store.dart';
 import 'bookmarks_page.dart';
+
+/// Which (reciter, surah) pairs have been downloaded for offline playback
+/// — a flat set persisted locally, `"qariId:surahNumber"` per entry.
+/// Deliberately app-state-free and tiny: nothing outside the reader needs
+/// this, and `offline_audio.dart`'s cache itself is the actual source of
+/// truth for playback (see its `resolve()`) — this set only drives the
+/// reader's own "دانلود شده" indicator, so it being slightly stale (e.g.
+/// after clearing browser storage) is harmless, not a correctness bug.
+abstract class _OfflineSurahs {
+  static const _key = 'offline_surahs';
+
+  static Set<String> _read() {
+    final raw = LocalStore.get(_key);
+    if (raw == null) return {};
+    return raw.split(',').where((s) => s.isNotEmpty).toSet();
+  }
+
+  static void _write(Set<String> ids) => LocalStore.set(_key, ids.join(','));
+
+  static bool has(String qariId, int surah) =>
+      _read().contains('$qariId:$surah');
+
+  static void add(String qariId, int surah) {
+    final ids = _read()..add('$qariId:$surah');
+    _write(ids);
+  }
+
+  static void remove(String qariId, int surah) {
+    final ids = _read()..remove('$qariId:$surah');
+    _write(ids);
+  }
+}
 
 class QuranPage extends StatefulWidget {
   const QuranPage({super.key});
@@ -151,6 +185,14 @@ class _SurahReaderPageState extends State<SurahReaderPage> {
   bool _running = false;
   int _playsThisAyah = 0;
 
+  /// Only the in-flight download's own progress needs to live in State —
+  /// "is it downloaded" is read straight from `_OfflineSurahs` on every
+  /// build instead, so it's never stale after the user changes reciters
+  /// on a different screen (Settings) and comes back to this one.
+  bool _downloading = false;
+  int _downloadDone = 0;
+  int _downloadTotal = 0;
+
   GlobalKey _keyFor(int n) => _ayahKeys.putIfAbsent(n, GlobalKey.new);
 
   @override
@@ -232,12 +274,58 @@ class _SurahReaderPageState extends State<SurahReaderPage> {
     recitation.setSpeed(settings.speed);
   }
 
+  String _clipUrl(int ayahNumber) {
+    final qari = settings.qari;
+    return 'https://everyayah.com/data/'
+        '${ayahClipPath(qari.folder, widget.surah.number, ayahNumber)}';
+  }
+
+  Future<void> _download() async {
+    if (!offlineAudio.available || _downloading) return;
+    setState(() {
+      _downloading = true;
+      _downloadDone = 0;
+      _downloadTotal = widget.surah.ayat.length;
+    });
+    var succeeded = 0;
+    for (final a in widget.surah.ayat) {
+      if (!mounted) return;
+      if (await offlineAudio.cache(_clipUrl(a.number))) succeeded++;
+      if (!mounted) return;
+      setState(() => _downloadDone++);
+    }
+    if (!mounted) return;
+    // Marked downloaded even on a partial failure (a flaky ayah or two) —
+    // resolve() falls back to the live URL per-clip regardless, so a few
+    // misses just mean those specific ayat still need the network, not
+    // that the whole download is worthless. Only an *empty* run (every
+    // single clip failed — no connectivity at all) stays unmarked, since
+    // re-tapping "دانلود" is the obvious recovery there.
+    if (succeeded > 0) {
+      _OfflineSurahs.add(settings.qariId, widget.surah.number);
+    }
+    setState(() => _downloading = false);
+  }
+
+  Future<void> _removeDownload() async {
+    setState(() => _downloading = true);
+    for (final a in widget.surah.ayat) {
+      await offlineAudio.uncache(_clipUrl(a.number));
+    }
+    _OfflineSurahs.remove(settings.qariId, widget.surah.number);
+    if (!mounted) return;
+    setState(() => _downloading = false);
+  }
+
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
       animation: Listenable.merge([appState, settings]),
       builder: (context, _) => Scaffold(
-        appBar: AppBar(title: Text(widget.surah.englishName)),
+        appBar: AppBar(
+          title: Text(widget.surah.englishName),
+          actions: [if (offlineAudio.available) _downloadAction(context)],
+        ),
         body: ListView.builder(
           controller: _sc,
           padding: EdgeInsets.fromLTRB(AppSpacing.xl, 0, AppSpacing.xl,
@@ -246,6 +334,52 @@ class _SurahReaderPageState extends State<SurahReaderPage> {
           itemBuilder: (context, i) => _ayahCard(widget.surah.ayat[i], i),
         ),
         bottomNavigationBar: _running ? _playbackBar(context) : null,
+      ),
+    );
+  }
+
+  /// One icon, three states: download (nothing cached for this reciter
+  /// yet), a small progress ring while it runs, or a filled "cached" mark
+  /// that removes the download on tap — freeing whatever room it used is
+  /// just as real a need as making it in the first place.
+  Widget _downloadAction(BuildContext context) {
+    if (_downloading) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+        child: Center(
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2.5,
+                  value: _downloadTotal == 0
+                      ? null
+                      : _downloadDone / _downloadTotal,
+                ),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              Text('$_downloadDone/$_downloadTotal',
+                  style: Theme.of(context).textTheme.labelMedium),
+            ],
+          ),
+        ),
+      );
+    }
+    final downloaded =
+        _OfflineSurahs.has(settings.qariId, widget.surah.number);
+    return IconButton(
+      tooltip: downloaded
+          ? 'حذف نسخهٔ آفلاین'
+          : 'دانلود این سوره برای پخش آفلاین',
+      onPressed: downloaded ? _removeDownload : _download,
+      icon: Icon(
+        downloaded
+            ? Icons.offline_pin_rounded
+            : Icons.download_for_offline_outlined,
+        color: downloaded ? AppColors.primary : null,
       ),
     );
   }

@@ -3,6 +3,7 @@ import 'dart:html' as html;
 import 'package:flutter/foundation.dart';
 import '../app_log.dart';
 import '../audio.dart';
+import '../offline_audio.dart';
 import '../settings.dart';
 
 RecitationPlayer makePlayer() => WebAudioPlayer();
@@ -59,8 +60,14 @@ class WebAudioPlayer implements RecitationPlayer {
         knownQaris.firstWhere((q) => q.id == qariId, orElse: () => knownQaris.first);
     final url =
         'https://everyayah.com/data/${ayahClipPath(qari.folder, surah, ayah)}';
+    // Transparent to every caller: plays from the downloaded copy (see
+    // offline_audio.dart / the reader's "دانلود برای آفلاین" control) when
+    // one exists, the live network URL otherwise — nothing here needs to
+    // know or care which.
+    final playUrl = await offlineAudio.resolve(url);
+    if (token != _playToken) return; // superseded while resolving
     _el
-      ..src = url
+      ..src = playUrl
       ..playbackRate = speed;
     final skip = _bismillahSkipSeconds(surah, ayah);
     if (skip > 0) {

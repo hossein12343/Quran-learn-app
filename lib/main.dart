@@ -14,6 +14,8 @@ import 'shared/services/app_state.dart';
 import 'shared/services/audio.dart';
 import 'shared/services/audio_impl/audio_factory.dart';
 import 'shared/services/oauth/web_nav.dart';
+import 'shared/services/offline_audio.dart';
+import 'shared/services/offline_audio_impl/offline_audio_factory.dart';
 import 'shared/services/prayer_reminder.dart';
 import 'shared/services/prayer_times.dart';
 import 'shared/services/prayer_times_impl/prayer_times_factory.dart';
@@ -144,6 +146,7 @@ void main() {
   AppLog.captureUncaught();
   recitation = createRecitationPlayer();
   recitation.warmUp();
+  offlineAudio = createOfflineAudio();
   sfx = createSoundEffects();
   sfx.warmUp();
   reminders = createReminderService();
