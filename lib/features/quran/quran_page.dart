@@ -11,6 +11,7 @@ import '../../shared/services/settings.dart';
 import '../../shared/services/store/local_store.dart';
 import 'bookmarks_page.dart';
 import 'khatm_page.dart';
+import 'verse_search_page.dart';
 
 /// Which (reciter, surah) pairs have been downloaded for offline playback
 /// — a flat set persisted locally, `"qariId:surahNumber"` per entry.
@@ -70,6 +71,13 @@ class _QuranPageState extends State<QuranPage> {
       appBar: AppBar(
         title: const Text('قرآن'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.manage_search_rounded),
+            tooltip: 'جستجوی آیات',
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(builder: (_) => const VerseSearchPage()),
+            ),
+          ),
           IconButton(
             icon: const Icon(Icons.checklist_rounded),
             tooltip: 'ختم رمضان',
@@ -176,7 +184,12 @@ class _QuranPageState extends State<QuranPage> {
 
 class SurahReaderPage extends StatefulWidget {
   final Surah surah;
-  const SurahReaderPage({super.key, required this.surah});
+
+  /// Scrolls to (and briefly highlights) this ayah on open — set when
+  /// arriving from verse search rather than the plain surah list.
+  final int? scrollToAyah;
+
+  const SurahReaderPage({super.key, required this.surah, this.scrollToAyah});
 
   @override
   State<SurahReaderPage> createState() => _SurahReaderPageState();
@@ -203,12 +216,56 @@ class _SurahReaderPageState extends State<SurahReaderPage> {
   int _downloadDone = 0;
   int _downloadTotal = 0;
 
+  /// Set only when arriving via [SurahReaderPage.scrollToAyah] — a brief
+  /// highlight so the ayah search actually landed you on is obvious, not
+  /// just "somewhere near the top of a long scroll."
+  int? _highlighted;
+
   GlobalKey _keyFor(int n) => _ayahKeys.putIfAbsent(n, GlobalKey.new);
 
   @override
   void initState() {
     super.initState();
     recitation.clipEndCount.addListener(_onClipEnd);
+    final target = widget.scrollToAyah;
+    if (target != null) {
+      _highlighted = target;
+      WidgetsBinding.instance
+          .addPostFrameCallback((_) => _scrollToAyah(target));
+    }
+  }
+
+  /// `ListView.builder` only gives an ayah a `BuildContext` once it's
+  /// been laid out — for a long surah, the target of a search jump is
+  /// almost never already built. Nudges the scroll position toward a
+  /// rough estimate of where it should be (bringing it into the lazy
+  /// build window), then retries; once the real context exists,
+  /// `Scrollable.ensureVisible` does the precise correction.
+  Future<void> _scrollToAyah(int ayahNumber, {int attemptsLeft = 25}) async {
+    if (!mounted) return;
+    final ctx = _keyFor(ayahNumber).currentContext;
+    if (ctx != null) {
+      await Scrollable.ensureVisible(
+        ctx,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOutCubic,
+        alignment: 0.12,
+      );
+      // A permanent highlight would just read as "this ayah is special"
+      // forever — fades after landing so it reads as "you arrived here."
+      await Future<void>.delayed(const Duration(seconds: 3));
+      if (mounted && _highlighted == ayahNumber) {
+        setState(() => _highlighted = null);
+      }
+      return;
+    }
+    if (attemptsLeft <= 0 || !_sc.hasClients) return;
+    final index = widget.surah.ayat.indexWhere((a) => a.number == ayahNumber);
+    if (index < 0) return;
+    final estimate = (index * 200.0).clamp(0.0, _sc.position.maxScrollExtent);
+    _sc.jumpTo(estimate);
+    await Future<void>.delayed(const Duration(milliseconds: 40));
+    await _scrollToAyah(ayahNumber, attemptsLeft: attemptsLeft - 1);
   }
 
   @override
@@ -430,15 +487,20 @@ class _SurahReaderPageState extends State<SurahReaderPage> {
   Widget _ayahCard(Ayah a, int i) {
     final bookmarked = appState.isBookmarked(widget.surah.number, a.number);
     final sounding = _running && _current == a.number;
+    final highlighted = _highlighted == a.number;
     return Container(
       key: _keyFor(a.number),
       margin: const EdgeInsets.only(bottom: AppSpacing.lg),
       padding: const EdgeInsets.all(AppSpacing.lg),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
+        color: highlighted
+            ? AppColors.goldLight
+            : Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(AppRadius.lg),
         border: Border.all(
-          color: sounding ? AppColors.primary : context.borderColor,
+          color: sounding
+              ? AppColors.primary
+              : (highlighted ? AppColors.gold : context.borderColor),
           width: 2,
         ),
       ),
