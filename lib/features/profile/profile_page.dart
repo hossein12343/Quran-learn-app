@@ -5,6 +5,7 @@ import '../../core/widgets/pattern_overlay.dart';
 import '../../shared/services/app_state.dart';
 import '../learn/memorized_page.dart';
 import '../progress/achievements_page.dart';
+import '../quran/asma_al_husna_page.dart';
 import '../quran/bookmarks_page.dart';
 import '../settings/settings_page.dart';
 import 'circles_page.dart';
@@ -141,7 +142,13 @@ class ProfilePage extends StatelessWidget {
                   Icons.groups_rounded,
                   'حلقهٔ خانواده و معلم',
                   () => Navigator.of(context).push(MaterialPageRoute<void>(
-                      builder: (_) => const CirclesPage())),
+                      builder: (_) => const CirclesPage()))),
+              _navRow(
+                  context,
+                  Icons.auto_awesome_rounded,
+                  'اسماء الحسنی',
+                  () => Navigator.of(context).push(MaterialPageRoute<void>(
+                      builder: (_) => const AsmaAlHusnaPage())),
                   last: true),
             ]),
           ),

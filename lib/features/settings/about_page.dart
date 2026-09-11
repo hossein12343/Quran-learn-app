@@ -176,6 +176,17 @@ class AboutPage extends StatelessWidget {
               index: 13,
               child: _card(
                 context,
+                icon: Icons.auto_awesome_rounded,
+                title: 'اسماء الحسنی',
+                body: 'فهرست ۹۹ نام الهی، از پروفایل قابل دسترس است — از '
+                    'طریق api.aladhan.com، فقط با معنای انگلیسی.',
+              ),
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            Reveal(
+              index: 14,
+              child: _card(
+                context,
                 icon: Icons.block_flipped,
                 title: 'تعهد ما دربارهٔ تبلیغات',
                 body: 'حتی اگر در آینده تبلیغاتی به نسخهٔ رایگان اضافه '
