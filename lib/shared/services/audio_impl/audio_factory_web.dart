@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'dart:html' as html;
 import 'package:flutter/foundation.dart';
+import '../../data/quran_seed.dart';
 import '../app_log.dart';
 import '../audio.dart';
+import '../media_session.dart';
 import '../offline_audio.dart';
 import '../settings.dart';
 
@@ -31,12 +33,30 @@ class WebAudioPlayer implements RecitationPlayer {
   int _playToken = 0;
 
   WebAudioPlayer() {
-    _el.onPlay.listen((_) => _playing.value = true);
-    _el.onPause.listen((_) => _playing.value = false);
+    _el.onPlay.listen((_) {
+      _playing.value = true;
+      mediaSession.setPlaying(true);
+    });
+    _el.onPause.listen((_) {
+      _playing.value = false;
+      mediaSession.setPlaying(false);
+    });
     _el.onEnded.listen((_) {
       _playing.value = false;
       _clipEnds.value++;
+      mediaSession.setPlaying(false);
     });
+    // Registered once, for the player's whole lifetime — the system's
+    // play/pause controls (lock screen, notification shade, hardware
+    // media keys) just drive the same `<audio>` element directly, so
+    // the `on*` listeners above are the single source of truth for
+    // `_playing`/`mediaSession.setPlaying` either way, whether playback
+    // started/stopped from inside the app or from outside it.
+    mediaSession.setHandlers(
+      onPlay: () => unawaited(_el.play()),
+      onPause: _el.pause,
+      onStop: () => unawaited(stop()),
+    );
   }
 
   @override
@@ -56,10 +76,17 @@ class WebAudioPlayer implements RecitationPlayer {
     double speed = 1.0,
   }) async {
     final token = ++_playToken;
-    final qari =
-        knownQaris.firstWhere((q) => q.id == qariId, orElse: () => knownQaris.first);
+    final qari = knownQaris.firstWhere((q) => q.id == qariId,
+        orElse: () => knownQaris.first);
     final url =
         'https://everyayah.com/data/${ayahClipPath(qari.folder, surah, ayah)}';
+    final surahMatch = surahs.where((s) => s.number == surah);
+    final surahName =
+        surahMatch.isEmpty ? 'سورهٔ $surah' : surahMatch.first.englishName;
+    mediaSession.setMetadata(
+      title: '$surahName — آیهٔ $ayah',
+      artist: qari.nativeName,
+    );
     // Transparent to every caller: plays from the downloaded copy (see
     // offline_audio.dart / the reader's "دانلود برای آفلاین" control) when
     // one exists, the live network URL otherwise — nothing here needs to

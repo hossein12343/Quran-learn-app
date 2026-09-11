@@ -15,6 +15,8 @@ import 'shared/services/audio.dart';
 import 'shared/services/audio_impl/audio_factory.dart';
 import 'shared/services/compass.dart';
 import 'shared/services/compass_impl/compass_factory.dart';
+import 'shared/services/media_session.dart';
+import 'shared/services/media_session_impl/media_session_factory.dart';
 import 'shared/services/oauth/web_nav.dart';
 import 'shared/services/share.dart';
 import 'shared/services/share_impl/share_factory.dart';
@@ -158,6 +160,7 @@ void main() {
   reciteGrader = createReciteGrader();
   deviceCompass = createDeviceCompass();
   shareService = createShareService();
+  mediaSession = createMediaSession();
   if (kIsWeb) {
     _installDailyReminderWatch();
     appState.addListener(_maybeResubscribePush);
