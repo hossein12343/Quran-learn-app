@@ -59,10 +59,16 @@ class _MainShellState extends State<MainShell> {
                   ? HomePage(onGoToLearn: () => _goTo(1))
                   : const SizedBox.shrink(),
               _opened.contains(1) ? const LearnPage() : const SizedBox.shrink(),
-              _opened.contains(2) ? const PracticePage() : const SizedBox.shrink(),
+              _opened.contains(2)
+                  ? const PracticePage()
+                  : const SizedBox.shrink(),
               _opened.contains(3) ? const QuranPage() : const SizedBox.shrink(),
-              _opened.contains(4) ? const ProgressPage() : const SizedBox.shrink(),
-              _opened.contains(5) ? const ProfilePage() : const SizedBox.shrink(),
+              _opened.contains(4)
+                  ? const ProgressPage()
+                  : const SizedBox.shrink(),
+              _opened.contains(5)
+                  ? const ProfilePage()
+                  : const SizedBox.shrink(),
             ],
           ),
           bottomNavigationBar: Container(
@@ -97,43 +103,47 @@ class _MainShellState extends State<MainShell> {
   Widget _tab(int i, _NavItem item) {
     final on = _index == i;
     final color = on ? AppColors.primary : context.mutedColor;
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: () => _goTo(i),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            height: 3,
-            color: on ? AppColors.primary : Colors.transparent,
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(
-                vertical: AppSpacing.sm, horizontal: 4),
-            child: AnimatedScale(
-              scale: on ? 1.08 : 1.0,
-              duration: const Duration(milliseconds: 160),
-              curve: Curves.easeOut,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(on ? item.active : item.inactive, size: 25, color: color),
-                  const SizedBox(height: 2),
-                  Text(
-                    item.label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: on ? FontWeight.w800 : FontWeight.w600,
-                      color: color,
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => _goTo(i),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              height: 3,
+              color: on ? AppColors.primary : Colors.transparent,
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(
+                  vertical: AppSpacing.sm, horizontal: 4),
+              child: AnimatedScale(
+                scale: on ? 1.08 : 1.0,
+                duration: const Duration(milliseconds: 160),
+                curve: Curves.easeOut,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(on ? item.active : item.inactive,
+                        size: 25, color: color),
+                    const SizedBox(height: 2),
+                    Text(
+                      item.label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: on ? FontWeight.w800 : FontWeight.w600,
+                        color: color,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

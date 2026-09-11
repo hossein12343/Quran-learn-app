@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../motion/motion.dart';
 import '../theme/app_theme.dart';
 
 /// Duolingo's signature button: a flat coloured face sitting on top of a
@@ -37,6 +38,7 @@ class DuoButton extends StatefulWidget {
 
 class _DuoButtonState extends State<DuoButton> {
   bool _down = false;
+  bool _hover = false;
 
   @override
   Widget build(BuildContext context) {
@@ -45,7 +47,10 @@ class _DuoButtonState extends State<DuoButton> {
     // `grey400`/`grey500` — light-mode-only tones that stayed pale cream
     // even in dark mode, clashing with the dark surface around them. The
     // context-based `border`/`mutedColor` getters flip with the theme.
-    final face = enabled ? widget.color : context.borderColor;
+    final baseFace = enabled ? widget.color : context.borderColor;
+    // Hover brightens the face a touch and (below) floats it up 2px so it
+    // reads as "ready to press" under a cursor.
+    final face = enabled && _hover ? _lighten(baseFace) : baseFace;
     final shadow = enabled
         ? (widget.shadowColor ?? _darken(widget.color))
         : context.mutedColor;
@@ -75,64 +80,81 @@ class _DuoButtonState extends State<DuoButton> {
       ),
     );
 
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTapDown: enabled ? (_) => setState(() => _down = true) : null,
-      onTapCancel: enabled ? () => setState(() => _down = false) : null,
-      onTapUp: enabled
-          ? (_) {
-              setState(() => _down = false);
-              widget.onTap!();
-            }
-          : null,
-      // `Stack`+`Positioned` was the original layout here, sized via
-      // `IntrinsicWidth` for the non-fullWidth case — but a `Stack` never
-      // contributes intrinsic width from children wrapped in `Positioned`
-      // (regardless of which edges are set), so it always measured 0 and
-      // `IntrinsicWidth` collapsed the whole button to nothing: invisible
-      // and untappable. Confirmed live — this made the quiz page's
-      // non-fullWidth "CHECK" button disappear on every drill exercise,
-      // a real dead end with no way to submit an answer and proceed.
-      // Fixed by dropping `Positioned` for plain `Padding`, which *does*
-      // size the `Stack` correctly: the shadow layer carries an invisible
-      // copy of the real content so both layers report the same natural
-      // width, and the press animation moves via `AnimatedPadding`
-      // instead of `AnimatedPositioned`.
-      child: Stack(
-        alignment: Alignment.topCenter,
-        children: [
-          Padding(
-            padding: EdgeInsets.only(top: widget.depth),
-            child: SizedBox(
-              width: widget.fullWidth ? double.infinity : null,
-              height: widget.height,
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  color: shadow,
-                  borderRadius: BorderRadius.circular(AppRadius.md),
-                ),
-                child:
-                    widget.fullWidth ? null : Opacity(opacity: 0, child: content),
+    // `Stack`+`Positioned` was the original layout here, sized via
+    // `IntrinsicWidth` for the non-fullWidth case — but a `Stack` never
+    // contributes intrinsic width from children wrapped in `Positioned`
+    // (regardless of which edges are set), so it always measured 0 and
+    // `IntrinsicWidth` collapsed the whole button to nothing: invisible
+    // and untappable. Confirmed live — this made the quiz page's
+    // non-fullWidth "CHECK" button disappear on every drill exercise,
+    // a real dead end with no way to submit an answer and proceed.
+    // Fixed by dropping `Positioned` for plain `Padding`, which *does*
+    // size the `Stack` correctly: the shadow layer carries an invisible
+    // copy of the real content so both layers report the same natural
+    // width, and the press animation moves via `AnimatedPadding`
+    // instead of `AnimatedPositioned`.
+    final faceStack = Stack(
+      alignment: Alignment.topCenter,
+      children: [
+        Padding(
+          padding: EdgeInsets.only(top: widget.depth),
+          child: SizedBox(
+            width: widget.fullWidth ? double.infinity : null,
+            height: widget.height,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: shadow,
+                borderRadius: BorderRadius.circular(AppRadius.md),
               ),
+              child:
+                  widget.fullWidth ? null : Opacity(opacity: 0, child: content),
             ),
           ),
-          AnimatedPadding(
-            duration: const Duration(milliseconds: 80),
-            curve: Curves.easeOut,
-            padding: EdgeInsets.only(top: _down ? widget.depth : 0),
-            child: SizedBox(
-              width: widget.fullWidth ? double.infinity : null,
-              height: widget.height,
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  color: face,
-                  borderRadius: BorderRadius.circular(AppRadius.md),
-                ),
-                child: Center(child: content),
+        ),
+        // Hover floats the face 2px above rest via the outer translate
+        // below; press still slides it down over the shadow via padding.
+        AnimatedPadding(
+          duration: const Duration(milliseconds: 80),
+          curve: Curves.easeOut,
+          padding: EdgeInsets.only(top: _down ? widget.depth : 0),
+          child: SizedBox(
+            width: widget.fullWidth ? double.infinity : null,
+            height: widget.height,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: face,
+                borderRadius: BorderRadius.circular(AppRadius.md),
               ),
+              child: Center(child: content),
             ),
           ),
-        ],
+        ),
+      ],
+    );
+
+    return MouseRegion(
+      cursor: enabled ? SystemMouseCursors.click : MouseCursor.defer,
+      onEnter: enabled ? (_) => setState(() => _hover = true) : null,
+      onExit: enabled ? (_) => setState(() => _hover = false) : null,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTapDown: enabled ? (_) => setState(() => _down = true) : null,
+        onTapCancel: enabled ? () => setState(() => _down = false) : null,
+        onTapUp: enabled
+            ? (d) {
+                setState(() => _down = false);
+                showTapBurst(context, d.globalPosition, color: widget.color);
+                widget.onTap!();
+              }
+            : null,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 140),
+          curve: Curves.easeOutBack,
+          transform: Matrix4.translationValues(
+              0, enabled && _hover && !_down ? -2 : 0, 0),
+          transformAlignment: Alignment.center,
+          child: faceStack,
+        ),
       ),
     );
   }
@@ -140,6 +162,11 @@ class _DuoButtonState extends State<DuoButton> {
   Color _darken(Color c) {
     final hsl = HSLColor.fromColor(c);
     return hsl.withLightness((hsl.lightness - 0.14).clamp(0.0, 1.0)).toColor();
+  }
+
+  Color _lighten(Color c) {
+    final hsl = HSLColor.fromColor(c);
+    return hsl.withLightness((hsl.lightness + 0.05).clamp(0.0, 1.0)).toColor();
   }
 }
 
@@ -172,6 +199,7 @@ class DuoTile extends StatefulWidget {
 
 class _DuoTileState extends State<DuoTile> {
   bool _down = false;
+  bool _hover = false;
 
   @override
   Widget build(BuildContext context) {
@@ -183,36 +211,47 @@ class _DuoTileState extends State<DuoTile> {
     // (e.g. sealed/selected states) by passing one explicitly.
     final fill = widget.fillColor ?? Theme.of(context).colorScheme.surface;
     final border = widget.borderColor ?? context.borderColor;
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTapDown: enabled ? (_) => setState(() => _down = true) : null,
-      onTapCancel: enabled ? () => setState(() => _down = false) : null,
-      onTapUp: enabled
-          ? (_) {
-              setState(() => _down = false);
-              widget.onTap!();
-            }
-          : null,
-      child: AnimatedScale(
-        scale: _down ? 0.96 : 1.0,
-        duration: const Duration(milliseconds: 90),
-        curve: Curves.easeOut,
-        child: Container(
-          width: widget.stretch ? double.infinity : null,
-          padding: widget.padding,
-          decoration: BoxDecoration(
-            color: fill,
-            borderRadius: BorderRadius.circular(AppRadius.md),
-            border: Border.all(color: border, width: 2.5),
-            boxShadow: [
-              BoxShadow(
-                color: border.withValues(alpha: 0.5),
-                offset: const Offset(0, 3),
-                blurRadius: 0,
-              ),
-            ],
+    final hovering = enabled && _hover && !_down;
+    return MouseRegion(
+      cursor: enabled ? SystemMouseCursors.click : MouseCursor.defer,
+      onEnter: enabled ? (_) => setState(() => _hover = true) : null,
+      onExit: enabled ? (_) => setState(() => _hover = false) : null,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTapDown: enabled ? (_) => setState(() => _down = true) : null,
+        onTapCancel: enabled ? () => setState(() => _down = false) : null,
+        onTapUp: enabled
+            ? (d) {
+                setState(() => _down = false);
+                showTapBurst(context, d.globalPosition, color: border);
+                widget.onTap!();
+              }
+            : null,
+        child: AnimatedScale(
+          scale: _down ? 0.96 : (hovering ? 1.015 : 1.0),
+          duration: const Duration(milliseconds: 130),
+          curve: _down ? Curves.easeOut : Curves.easeOutBack,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 130),
+            width: widget.stretch ? double.infinity : null,
+            padding: widget.padding,
+            decoration: BoxDecoration(
+              color: fill,
+              borderRadius: BorderRadius.circular(AppRadius.md),
+              border: Border.all(color: border, width: 2.5),
+              boxShadow: [
+                BoxShadow(
+                  color: border.withValues(alpha: 0.5),
+                  // The shadow underline grows a touch on hover, echoing
+                  // DuoButton's lift with a tile that has no "face" to
+                  // actually raise.
+                  offset: Offset(0, hovering ? 4 : 3),
+                  blurRadius: 0,
+                ),
+              ],
+            ),
+            child: widget.child,
           ),
-          child: widget.child,
         ),
       ),
     );

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../motion/motion.dart';
 import '../theme/app_theme.dart';
 
 /// A single circular node on a winding lesson trail.
@@ -24,45 +25,59 @@ class PathNode extends StatefulWidget {
 
 class _PathNodeState extends State<PathNode> {
   bool _down = false;
+  bool _hover = false;
   static const double _depth = 7;
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTapDown: (_) => setState(() => _down = true),
-      onTapCancel: () => setState(() => _down = false),
-      onTapUp: (_) {
-        setState(() => _down = false);
-        widget.onTap();
-      },
-      child: SizedBox(
-        width: widget.size,
-        height: widget.size + _depth,
-        child: Stack(
-          children: [
-            Positioned(
-              top: _depth,
-              left: 0,
-              right: 0,
-              height: widget.size,
-              child: DecoratedBox(
-                decoration:
-                    BoxDecoration(shape: BoxShape.circle, color: widget.shadow),
-              ),
+    final hovering = _hover && !_down;
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hover = true),
+      onExit: (_) => setState(() => _hover = false),
+      child: GestureDetector(
+        onTapDown: (_) => setState(() => _down = true),
+        onTapCancel: () => setState(() => _down = false),
+        onTapUp: (d) {
+          setState(() => _down = false);
+          showTapBurst(context, d.globalPosition, color: widget.face);
+          widget.onTap();
+        },
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 120),
+          curve: Curves.easeOutBack,
+          transform: Matrix4.translationValues(0, hovering ? -2 : 0, 0),
+          transformAlignment: Alignment.center,
+          child: SizedBox(
+            width: widget.size,
+            height: widget.size + _depth,
+            child: Stack(
+              children: [
+                Positioned(
+                  top: _depth,
+                  left: 0,
+                  right: 0,
+                  height: widget.size,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                        shape: BoxShape.circle, color: widget.shadow),
+                  ),
+                ),
+                AnimatedPositioned(
+                  duration: const Duration(milliseconds: 80),
+                  top: _down ? _depth : 0,
+                  left: 0,
+                  right: 0,
+                  height: widget.size,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                        shape: BoxShape.circle, color: widget.face),
+                    child: Center(child: widget.icon),
+                  ),
+                ),
+              ],
             ),
-            AnimatedPositioned(
-              duration: const Duration(milliseconds: 80),
-              top: _down ? _depth : 0,
-              left: 0,
-              right: 0,
-              height: widget.size,
-              child: DecoratedBox(
-                decoration:
-                    BoxDecoration(shape: BoxShape.circle, color: widget.face),
-                child: Center(child: widget.icon),
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );

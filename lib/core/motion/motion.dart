@@ -64,18 +64,96 @@ class _RevealState extends State<Reveal> with SingleTickerProviderStateMixin {
   }
 }
 
-/// Every tappable surface compresses slightly. One tactile signature,
-/// defined once, applied everywhere.
+/// Fires a quick expanding, fading ring at [globalPosition] — the little
+/// "pop" of feedback on a tap or a click, so a press always lands with
+/// something visible even when the target itself barely moves. No-op if
+/// there's no [Overlay] in scope.
+void showTapBurst(BuildContext context, Offset globalPosition, {Color? color}) {
+  final overlay = Overlay.maybeOf(context);
+  if (overlay == null) return;
+  final tint = color ?? AppColors.primary;
+  late final OverlayEntry entry;
+  entry = OverlayEntry(
+    builder: (_) => Positioned(
+      left: globalPosition.dx - 26,
+      top: globalPosition.dy - 26,
+      child: IgnorePointer(
+        child: _BurstRing(color: tint, onDone: entry.remove),
+      ),
+    ),
+  );
+  overlay.insert(entry);
+}
+
+class _BurstRing extends StatefulWidget {
+  final Color color;
+  final VoidCallback onDone;
+  const _BurstRing({required this.color, required this.onDone});
+
+  @override
+  State<_BurstRing> createState() => _BurstRingState();
+}
+
+class _BurstRingState extends State<_BurstRing>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 360),
+  )..forward().whenComplete(widget.onDone);
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _c,
+      builder: (context, _) {
+        final t = Curves.easeOut.transform(_c.value);
+        return Opacity(
+          opacity: (1 - t) * 0.5,
+          child: Transform.scale(
+            scale: 0.25 + t * 1.6,
+            child: Container(
+              width: 52,
+              height: 52,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(color: color, width: 3),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Color get color => widget.color;
+}
+
+/// Every tappable surface compresses slightly on press, lifts a touch on
+/// hover (and shows the click cursor), and pops a ring on release. One
+/// tactile signature, defined once, applied everywhere.
 class Pressable extends StatefulWidget {
   final Widget child;
   final VoidCallback? onTap;
   final double scale;
+
+  /// Whether releasing fires a [showTapBurst] ring. Off for surfaces where
+  /// a ring would be noise — a fast run of word-bank taps, say.
+  final bool burst;
+  final Color? burstColor;
 
   const Pressable({
     super.key,
     required this.child,
     this.onTap,
     this.scale = 0.965,
+    this.burst = true,
+    this.burstColor,
   });
 
   @override
@@ -84,21 +162,35 @@ class Pressable extends StatefulWidget {
 
 class _PressableState extends State<Pressable> {
   bool _down = false;
+  bool _hover = false;
 
   @override
   Widget build(BuildContext context) {
     final on = widget.onTap != null;
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTapDown: on ? (_) => setState(() => _down = true) : null,
-      onTapUp: on ? (_) => setState(() => _down = false) : null,
-      onTapCancel: on ? () => setState(() => _down = false) : null,
-      onTap: widget.onTap,
-      child: AnimatedScale(
-        scale: _down ? widget.scale : 1.0,
-        duration: const Duration(milliseconds: 120),
-        curve: Curves.easeOut,
-        child: widget.child,
+    return MouseRegion(
+      cursor: on ? SystemMouseCursors.click : MouseCursor.defer,
+      onEnter: on ? (_) => setState(() => _hover = true) : null,
+      onExit: on ? (_) => setState(() => _hover = false) : null,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTapDown: on ? (_) => setState(() => _down = true) : null,
+        onTapCancel: on ? () => setState(() => _down = false) : null,
+        onTapUp: on
+            ? (d) {
+                setState(() => _down = false);
+                if (widget.burst) {
+                  showTapBurst(context, d.globalPosition,
+                      color: widget.burstColor);
+                }
+              }
+            : null,
+        onTap: widget.onTap,
+        child: AnimatedScale(
+          scale: _down ? widget.scale : (_hover ? 1.012 : 1.0),
+          duration: const Duration(milliseconds: 150),
+          curve: _down ? Curves.easeOut : Curves.easeOutBack,
+          child: widget.child,
+        ),
       ),
     );
   }
@@ -194,7 +286,8 @@ class ProgressRing extends StatelessWidget {
     // showing as a stark pale ring on a dark card. Callers that sit on a
     // saturated background (e.g. the hero level card) still pass their
     // own `track` (`Colors.white24`) and are unaffected.
-    final resolvedTrack = track ?? Theme.of(context).colorScheme.surfaceContainerHighest;
+    final resolvedTrack =
+        track ?? Theme.of(context).colorScheme.surfaceContainerHighest;
     return SizedBox(
       width: size,
       height: size,
