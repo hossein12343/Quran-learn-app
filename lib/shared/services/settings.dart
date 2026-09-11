@@ -1,6 +1,10 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'prayer_times.dart';
 import 'store/local_store.dart';
+
+/// What a reminder's time-of-day is anchored to.
+enum ReminderAnchor { fixedTime, afterPrayer }
 
 /// How a surah is broken up for memorisation.
 enum LearnMode {
@@ -101,7 +105,21 @@ class Settings extends ChangeNotifier {
   LearnMode mode = LearnMode.ayah;
   String language = 'fa'; // 'en' or 'fa' — Persian by default
   bool dailyReminder = true;
+
+  /// The resolved time-of-day the reminder actually fires at. When
+  /// [reminderAnchor] is [ReminderAnchor.afterPrayer], this is recomputed
+  /// once a day from today's prayer times (see `prayer_reminder.dart`) —
+  /// it is *not* itself the source of truth in that mode, just the last
+  /// resolved value, so every existing call site that reads it (the
+  /// per-minute check in main.dart, the push-reminder sync) keeps working
+  /// unchanged regardless of which mode is active.
   TimeOfDay reminderTime = const TimeOfDay(hour: 6, minute: 30);
+
+  ReminderAnchor reminderAnchor = ReminderAnchor.fixedTime;
+  Prayer reminderPrayer = Prayer.isha;
+
+  /// Minutes after (never before — praying comes first) [reminderPrayer].
+  int reminderOffsetMinutes = 15;
 
   /// Multiplies every Arabic font size in the app. Kept modest so layouts
   /// never break: 0.85 (small) .. 1.35 (large).
@@ -152,6 +170,41 @@ class Settings extends ChangeNotifier {
     _save();
   }
 
+  /// Switches between a fixed clock time and a prayer-anchored one.
+  /// Picking [ReminderAnchor.fixedTime] restores manual control over
+  /// [reminderTime] via [setReminder]; picking [ReminderAnchor.afterPrayer]
+  /// hands that over to `resolvePrayerAnchoredReminderTime()`, which the
+  /// caller (Settings page, main.dart) is expected to invoke right after —
+  /// this setter only records the choice, since resolving the actual time
+  /// needs a network round trip this class has no business making.
+  void setReminderAnchor(ReminderAnchor anchor) {
+    reminderAnchor = anchor;
+    notifyListeners();
+    _save();
+  }
+
+  void setReminderPrayer(Prayer p) {
+    reminderPrayer = p;
+    notifyListeners();
+    _save();
+  }
+
+  void setReminderOffsetMinutes(int m) {
+    reminderOffsetMinutes = m.clamp(0, 90);
+    notifyListeners();
+    _save();
+  }
+
+  /// Called by the prayer-time resolver once it has computed today's
+  /// anchored time — distinct from [setReminder] so it never flips
+  /// [reminderAnchor] back to fixed or touches [dailyReminder].
+  void setResolvedReminderTime(TimeOfDay t) {
+    if (reminderTime == t) return;
+    reminderTime = t;
+    notifyListeners();
+    _save();
+  }
+
   void setArabicScale(double v) {
     arabicScale = v.clamp(0.85, 1.35);
     notifyListeners();
@@ -175,6 +228,12 @@ class Settings extends ChangeNotifier {
       if (h != null && m != null) {
         reminderTime = TimeOfDay(hour: h, minute: m);
       }
+      reminderAnchor = ReminderAnchor.values[
+          (s['reminderAnchor'] as num?)?.toInt() ?? reminderAnchor.index];
+      reminderPrayer = Prayer.values[
+          (s['reminderPrayer'] as num?)?.toInt() ?? reminderPrayer.index];
+      reminderOffsetMinutes =
+          (s['reminderOffsetMinutes'] as num?)?.toInt() ?? reminderOffsetMinutes;
       arabicScale = (s['arabicScale'] as num?)?.toDouble() ?? arabicScale;
     } on Object {
       // Corrupt local settings — keep defaults.
@@ -193,6 +252,9 @@ class Settings extends ChangeNotifier {
         'dailyReminder': dailyReminder,
         'reminderHour': reminderTime.hour,
         'reminderMinute': reminderTime.minute,
+        'reminderAnchor': reminderAnchor.index,
+        'reminderPrayer': reminderPrayer.index,
+        'reminderOffsetMinutes': reminderOffsetMinutes,
         'arabicScale': arabicScale,
       }),
     );

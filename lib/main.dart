@@ -14,6 +14,9 @@ import 'shared/services/app_state.dart';
 import 'shared/services/audio.dart';
 import 'shared/services/audio_impl/audio_factory.dart';
 import 'shared/services/oauth/web_nav.dart';
+import 'shared/services/prayer_reminder.dart';
+import 'shared/services/prayer_times.dart';
+import 'shared/services/prayer_times_impl/prayer_times_factory.dart';
 import 'shared/services/recite_check.dart';
 import 'shared/services/recite_check_impl/recite_check_factory.dart';
 import 'shared/services/reminder_impl/reminder_factory.dart';
@@ -63,6 +66,9 @@ String _dateKey(DateTime d) =>
     '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
 void _checkDailyReminder() {
+  // Cheap no-op after the first successful resolve of the calendar day
+  // (see prayer_reminder.dart's date guard) — safe to call on every tick.
+  unawaited(resolvePrayerAnchoredReminderTime());
   if (!settings.dailyReminder || !reminders.available) return;
   final now = DateTime.now();
   final today = _dateKey(now);
@@ -141,12 +147,16 @@ void main() {
   sfx = createSoundEffects();
   sfx.warmUp();
   reminders = createReminderService();
+  prayerTimesService = createPrayerTimesService();
   reciteGrader = createReciteGrader();
   if (kIsWeb) {
     _installDailyReminderWatch();
     appState.addListener(_maybeResubscribePush);
   }
   settings.restore();
+  // Picks up right away if the restored settings are already anchored to a
+  // prayer, instead of waiting up to a minute for the first timer tick.
+  unawaited(resolvePrayerAnchoredReminderTime());
   runApp(const QuranLearnApp());
 }
 

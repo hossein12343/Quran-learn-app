@@ -1,8 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import '../../core/motion/motion.dart';
 import '../../core/theme/app_theme.dart';
 import '../../shared/services/app_state.dart';
 import '../../shared/services/audio.dart';
+import '../../shared/services/prayer_reminder.dart';
+import '../../shared/services/prayer_times.dart';
 import '../../shared/services/recite_check.dart';
 import '../../shared/services/reminders.dart';
 import '../../shared/services/settings.dart';
@@ -310,8 +314,6 @@ class SettingsPage extends StatelessWidget {
   }
 
   Widget _reminderSection(BuildContext context) {
-    final h = settings.reminderTime.hour.toString().padLeft(2, '0');
-    final m = settings.reminderTime.minute.toString().padLeft(2, '0');
     final blocked = settings.dailyReminder &&
         reminders.available &&
         !reminders.permissionGranted;
@@ -321,12 +323,11 @@ class SettingsPage extends StatelessWidget {
     if (!reminders.available) {
       subtitle = 'اعلان مرورگر در این دستگاه در دسترس نیست.';
     } else if (canBackground) {
-      subtitle = 'چون وارد حساب شده‌اید، حتی وقتی برنامه بسته باشد هم در '
-          'ساعت زیر یادآوری می‌شوید.';
+      subtitle = 'چون وارد حساب شده‌اید، حتی وقتی برنامه بسته باشد هم '
+          'یادآوری می‌شوید.';
     } else {
-      subtitle = 'وقتی این تب باز باشد، در ساعت زیر با یک اعلان مرورگر '
-          'یادآوری می‌کند. برای یادآوری حتی وقتی برنامه بسته است، وارد '
-          'حساب کاربری شوید.';
+      subtitle = 'وقتی این تب باز باشد با یک اعلان مرورگر یادآوری می‌کند. '
+          'برای یادآوری حتی وقتی برنامه بسته است، وارد حساب کاربری شوید.';
     }
     return _panel(
       context,
@@ -344,25 +345,20 @@ class SettingsPage extends StatelessWidget {
               onChanged: reminders.available
                   ? (v) => _onReminderToggle(context, v)
                   : null,
-              title: Text('یادآوری در ساعت $h:$m',
+              title: Text('یادآوری روزانه',
                   style: Theme.of(context).textTheme.bodyLarge),
             ),
-            if (settings.dailyReminder)
-              Pressable(
-                onTap: () => _pickReminderTime(context),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                      vertical: AppSpacing.sm),
-                  child: Text('تغییر ساعت یادآوری',
-                      style: Theme.of(context)
-                          .textTheme
-                          .labelLarge
-                          ?.copyWith(color: AppColors.blue)),
-                ),
-              ),
+            if (settings.dailyReminder) ...[
+              const SizedBox(height: AppSpacing.sm),
+              _anchorChoice(context),
+              const SizedBox(height: AppSpacing.md),
+              settings.reminderAnchor == ReminderAnchor.fixedTime
+                  ? _fixedTimeControl(context)
+                  : _prayerAnchorControl(context),
+            ],
             if (blocked)
               Padding(
-                padding: const EdgeInsets.only(top: AppSpacing.xs),
+                padding: const EdgeInsets.only(top: AppSpacing.md),
                 child: Text(
                   'اجازهٔ اعلان داده نشده — یادآور کار نمی‌کند تا از تنظیمات '
                   'مرورگر اجازه بدهید.',
@@ -375,6 +371,181 @@ class SettingsPage extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+
+  /// "ساعت مشخص" vs "بعد از نماز" — a two-way choice, same visual language
+  /// as `_modeSection`'s learning-mode picker.
+  Widget _anchorChoice(BuildContext context) {
+    Widget chip(String label, ReminderAnchor value) {
+      final on = settings.reminderAnchor == value;
+      return Expanded(
+        child: Pressable(
+          onTap: () {
+            settings.setReminderAnchor(value);
+            if (value == ReminderAnchor.afterPrayer) {
+              unawaited(resolvePrayerAnchoredReminderTime(force: true));
+            }
+          },
+          child: Container(
+            alignment: Alignment.center,
+            padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
+            decoration: BoxDecoration(
+              color: on ? AppColors.primaryLight : Colors.transparent,
+              borderRadius: BorderRadius.circular(AppRadius.sm),
+              border: Border.all(
+                  color: on ? AppColors.primary : context.borderColor),
+            ),
+            child: Text(
+              label,
+              style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                  color: on ? AppColors.primaryDeep : null),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Row(
+      children: [
+        chip('ساعت مشخص', ReminderAnchor.fixedTime),
+        const SizedBox(width: AppSpacing.sm),
+        chip('بعد از نماز', ReminderAnchor.afterPrayer),
+      ],
+    );
+  }
+
+  Widget _fixedTimeControl(BuildContext context) {
+    final h = settings.reminderTime.hour.toString().padLeft(2, '0');
+    final m = settings.reminderTime.minute.toString().padLeft(2, '0');
+    return Row(
+      children: [
+        Text('یادآوری در ساعت $h:$m',
+            style: Theme.of(context).textTheme.bodyLarge),
+        const Spacer(),
+        Pressable(
+          onTap: () => _pickReminderTime(context),
+          child: Text('تغییر ساعت',
+              style: Theme.of(context)
+                  .textTheme
+                  .labelLarge
+                  ?.copyWith(color: AppColors.blue)),
+        ),
+      ],
+    );
+  }
+
+  /// Prayer picker + a "N minutes after" offset stepper, plus the live
+  /// resolved-time status (calculating / found / couldn't find — see
+  /// `prayer_reminder.dart`'s `prayerLookupStatus`).
+  Widget _prayerAnchorControl(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Wrap(
+          spacing: AppSpacing.sm,
+          runSpacing: AppSpacing.sm,
+          children: [
+            for (final p in Prayer.values)
+              Pressable(
+                onTap: () {
+                  settings.setReminderPrayer(p);
+                  unawaited(resolvePrayerAnchoredReminderTime(force: true));
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.md, vertical: AppSpacing.sm),
+                  decoration: BoxDecoration(
+                    color: settings.reminderPrayer == p
+                        ? AppColors.primaryLight
+                        : Colors.transparent,
+                    borderRadius: BorderRadius.circular(AppRadius.circular),
+                    border: Border.all(
+                        color: settings.reminderPrayer == p
+                            ? AppColors.primary
+                            : context.borderColor),
+                  ),
+                  child: Text(
+                    p.labelFa,
+                    style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                        color: settings.reminderPrayer == p
+                            ? AppColors.primaryDeep
+                            : null),
+                  ),
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: AppSpacing.md),
+        Row(
+          children: [
+            Text('${settings.reminderOffsetMinutes} دقیقه بعد از اذان',
+                style: Theme.of(context).textTheme.bodyLarge),
+            const Spacer(),
+            IconButton(
+              onPressed: settings.reminderOffsetMinutes <= 0
+                  ? null
+                  : () => settings.setReminderOffsetMinutes(
+                      settings.reminderOffsetMinutes - 5),
+              icon: const Icon(Icons.remove_circle_outline_rounded),
+              color: AppColors.primary,
+            ),
+            IconButton(
+              onPressed: settings.reminderOffsetMinutes >= 90
+                  ? null
+                  : () => settings.setReminderOffsetMinutes(
+                      settings.reminderOffsetMinutes + 5),
+              icon: const Icon(Icons.add_circle_outline_rounded),
+              color: AppColors.primary,
+            ),
+          ],
+        ),
+        const SizedBox(height: AppSpacing.xs),
+        ValueListenableBuilder<PrayerLookupStatus>(
+          valueListenable: prayerLookupStatus,
+          builder: (context, status, _) {
+            final h = settings.reminderTime.hour.toString().padLeft(2, '0');
+            final m =
+                settings.reminderTime.minute.toString().padLeft(2, '0');
+            final (text, color) = switch (status) {
+              PrayerLookupStatus.loading => (
+                  'در حال یافتن ساعت اذان…',
+                  context.mutedColor
+                ),
+              PrayerLookupStatus.failed => (
+                  'ساعت اذان پیدا نشد — اجازهٔ موقعیت مکانی لازم است. '
+                      'فعلاً طبق آخرین ساعت شناخته‌شده ($h:$m) یادآوری می‌شود.',
+                  AppColors.red
+                ),
+              PrayerLookupStatus.ok || PrayerLookupStatus.idle => (
+                  'یادآوری حدود ساعت $h:$m',
+                  AppColors.primaryDeep
+                ),
+            };
+            return Row(
+              children: [
+                Expanded(
+                  child: Text(text,
+                      style: Theme.of(context)
+                          .textTheme
+                          .labelMedium
+                          ?.copyWith(color: color)),
+                ),
+                if (status == PrayerLookupStatus.failed)
+                  Pressable(
+                    onTap: () => unawaited(
+                        resolvePrayerAnchoredReminderTime(force: true)),
+                    child: Text('تلاش دوباره',
+                        style: Theme.of(context)
+                            .textTheme
+                            .labelMedium
+                            ?.copyWith(color: AppColors.blue)),
+                  ),
+              ],
+            );
+          },
+        ),
+      ],
     );
   }
 
