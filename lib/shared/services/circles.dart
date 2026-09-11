@@ -117,7 +117,7 @@ class CirclesState extends ChangeNotifier {
           : (await Backend.listCircleMembers(token, owned['id'] as String))
               .map(CircleMember.fromRow)
               .toList();
-      joinedCircles = (await Backend.listJoinedCircles(token))
+      joinedCircles = (await Backend.listJoinedCircles(token, uid))
           .where((r) => r['circles'] != null)
           .map(JoinedCircle.fromRow)
           .toList();

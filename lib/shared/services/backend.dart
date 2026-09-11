@@ -368,13 +368,19 @@ class Backend {
   }
 
   /// Circles the caller has joined as a member (not owns) — for the "I'm
-  /// part of these" list, and for leaving one.
+  /// part of these" list, and for leaving one. The explicit `user_id`
+  /// filter matters here, not just cosmetically: RLS on `circle_members`
+  /// also lets a circle *owner* see every row in their own circle (so the
+  /// owner's dashboard can list members), so a bare unfiltered select
+  /// would return the owner's own members back to them under "circles
+  /// I've joined" — caught live testing this against a real circle with a
+  /// real member before it shipped.
   static Future<List<Map<String, dynamic>>> listJoinedCircles(
-      String token) async {
+      String token, String userId) async {
     final res = await Net.request(
       'GET',
-      '$baseUrl/rest/v1/circle_members?select=circle_id,joined_at,'
-          'circles(id,name,owner_id)',
+      '$baseUrl/rest/v1/circle_members?user_id=eq.$userId'
+          '&select=circle_id,joined_at,circles(id,name,owner_id)',
       headers: _headers(token),
     );
     if (!res.ok) throw _pgException(res.body);
