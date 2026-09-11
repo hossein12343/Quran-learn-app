@@ -11,6 +11,7 @@ import '../../shared/services/settings.dart';
 import '../../shared/services/store/local_store.dart';
 import 'bookmarks_page.dart';
 import 'khatm_page.dart';
+import 'mushaf_page_view.dart';
 import 'verse_search_page.dart';
 
 /// Which (reciter, surah) pairs have been downloaded for offline playback
@@ -71,6 +72,13 @@ class _QuranPageState extends State<QuranPage> {
       appBar: AppBar(
         title: const Text('قرآن'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.menu_book_rounded),
+            tooltip: 'مصحف — صفحه به صفحه',
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(builder: (_) => const MushafPageView()),
+            ),
+          ),
           IconButton(
             icon: const Icon(Icons.manage_search_rounded),
             tooltip: 'جستجوی آیات',
