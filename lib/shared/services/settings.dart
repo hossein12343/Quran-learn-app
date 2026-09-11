@@ -145,6 +145,13 @@ class Settings extends ChangeNotifier {
   /// `shared/data/translation2.dart`) instead of the default one.
   bool useTranslation2 = false;
 
+  /// Renders each ayah as tappable words (see
+  /// `shared/data/word_by_word.dart`) instead of one solid line, so a
+  /// reader can check a single word's meaning without leaving the
+  /// ayah. Off by default, same reasoning as [tajweedEnabled] — a
+  /// study aid, not the default reading experience.
+  bool wordByWordEnabled = false;
+
   Qari get qari => knownQaris.firstWhere((q) => q.id == qariId,
       orElse: () => knownQaris.first);
 
@@ -248,6 +255,12 @@ class Settings extends ChangeNotifier {
     _save();
   }
 
+  void setWordByWordEnabled(bool on) {
+    wordByWordEnabled = on;
+    notifyListeners();
+    _save();
+  }
+
   /// Restores saved settings on this device. Called once at app boot.
   void restore() {
     final raw = LocalStore.get('settings');
@@ -275,6 +288,7 @@ class Settings extends ChangeNotifier {
       uiTextScale = (s['uiTextScale'] as num?)?.toDouble() ?? uiTextScale;
       tajweedEnabled = s['tajweedEnabled'] as bool? ?? tajweedEnabled;
       useTranslation2 = s['useTranslation2'] as bool? ?? useTranslation2;
+      wordByWordEnabled = s['wordByWordEnabled'] as bool? ?? wordByWordEnabled;
     } on Object {
       // Corrupt local settings — keep defaults.
     }
@@ -299,6 +313,7 @@ class Settings extends ChangeNotifier {
         'uiTextScale': uiTextScale,
         'tajweedEnabled': tajweedEnabled,
         'useTranslation2': useTranslation2,
+        'wordByWordEnabled': wordByWordEnabled,
       }),
     );
   }

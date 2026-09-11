@@ -22,6 +22,7 @@ flutter:
     - assets/quran_full.json
     - assets/quran_tajweed.json
     - assets/quran_translation2.json
+    - assets/quran_wbw.json
     - assets/branding/app_logo.png
   fonts:
     - family: Amiri

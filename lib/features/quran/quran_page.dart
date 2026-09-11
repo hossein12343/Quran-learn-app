@@ -5,6 +5,7 @@ import '../../shared/data/quran_seed.dart';
 import '../../shared/data/tajweed_data.dart';
 import '../../shared/data/tajweed_parser.dart';
 import '../../shared/data/translation2.dart';
+import '../../shared/data/word_by_word.dart';
 import '../../shared/services/app_state.dart';
 import '../../shared/services/audio.dart';
 import '../../shared/services/offline_audio.dart';
@@ -247,6 +248,13 @@ class _SurahReaderPageState extends State<SurahReaderPage> {
   /// just "somewhere near the top of a long scroll."
   int? _highlighted;
 
+  /// Which single word (by ayah number + position within that ayah's
+  /// word-by-word list) currently has its meaning expanded, in
+  /// word-by-word mode — at most one at a time, across the whole
+  /// reader, so tapping a new word closes whichever was open before.
+  int? _tappedWordAyah;
+  int? _tappedWordIndex;
+
   GlobalKey _keyFor(int n) => _ayahKeys.putIfAbsent(n, GlobalKey.new);
 
   @override
@@ -418,6 +426,7 @@ class _SurahReaderPageState extends State<SurahReaderPage> {
         appBar: AppBar(
           title: Text(widget.surah.englishName),
           actions: [
+            _wordByWordToggle(context),
             _translation2Toggle(context),
             if (tajweedLoaded) _tajweedToggle(context),
             if (offlineAudio.available) _downloadAction(context),
@@ -476,6 +485,44 @@ class _SurahReaderPageState extends State<SurahReaderPage> {
             : Icons.download_for_offline_outlined,
         color: downloaded ? AppColors.primary : null,
       ),
+    );
+  }
+
+  bool _loadingWbw = false;
+
+  /// Lazily loads word-by-word data on first use, same pattern as
+  /// [_toggleTranslation2] — a study aid most sessions won't touch.
+  /// Turning word-by-word on closes whatever word-meaning bubble was
+  /// already open (stale index into a now-different rendering mode).
+  Future<void> _toggleWordByWord() async {
+    if (!settings.wordByWordEnabled && !wordByWordLoaded) {
+      setState(() => _loadingWbw = true);
+      await loadWordByWord();
+      if (!mounted) return;
+      setState(() => _loadingWbw = false);
+    }
+    setState(() {
+      _tappedWordAyah = null;
+      _tappedWordIndex = null;
+    });
+    settings.setWordByWordEnabled(!settings.wordByWordEnabled);
+  }
+
+  Widget _wordByWordToggle(BuildContext context) {
+    final on = settings.wordByWordEnabled;
+    return IconButton(
+      tooltip: on ? 'خاموش‌کردن معنای واژه‌به‌واژه' : 'معنای واژه‌به‌واژه',
+      onPressed: _loadingWbw ? null : _toggleWordByWord,
+      icon: _loadingWbw
+          ? const SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          : Icon(
+              Icons.touch_app_rounded,
+              color: on ? AppColors.primary : null,
+            ),
     );
   }
 
@@ -538,11 +585,62 @@ class _SurahReaderPageState extends State<SurahReaderPage> {
       size: 27 * settings.arabicScale,
       color: Theme.of(context).textTheme.bodyLarge?.color,
     );
+    if (settings.wordByWordEnabled) {
+      final words = wordByWordFor(widget.surah.number, a.number);
+      if (words != null)
+        return _wordByWordText(context, a.number, words, style);
+    }
     final raw = settings.tajweedEnabled
         ? tajweedTextFor(widget.surah.number, a.number)
         : null;
     if (raw == null) return Text(a.arabic, style: style);
     return Text.rich(TextSpan(children: parseTajweed(raw, style)));
+  }
+
+  /// Word-by-word mode's own renderer — a `Wrap` of individually
+  /// tappable words instead of one `Text` block, each with room to
+  /// expand its own meaning underneath. Deliberately not combined with
+  /// tajweed coloring (see `settings.wordByWordEnabled`'s doc comment):
+  /// the ayah's tajweed markup is a per-character span list, not
+  /// segmented by word, so reconciling the two rendering paths isn't
+  /// worth it for what's already a secondary study mode.
+  Widget _wordByWordText(
+    BuildContext context,
+    int ayahNumber,
+    List<WbwWord> words,
+    TextStyle style,
+  ) {
+    final translationStyle = Theme.of(context).textTheme.labelMedium?.copyWith(
+          color: AppColors.primary,
+          fontWeight: FontWeight.w600,
+        );
+    return Wrap(
+      textDirection: TextDirection.rtl,
+      alignment: WrapAlignment.start,
+      spacing: AppSpacing.sm,
+      runSpacing: AppSpacing.xs,
+      children: [
+        for (var i = 0; i < words.length; i++)
+          GestureDetector(
+            onTap: () => setState(() {
+              final closing =
+                  _tappedWordAyah == ayahNumber && _tappedWordIndex == i;
+              _tappedWordAyah = closing ? null : ayahNumber;
+              _tappedWordIndex = closing ? null : i;
+            }),
+            child: Column(
+              children: [
+                Text(words[i].arabic, style: style),
+                if (_tappedWordAyah == ayahNumber && _tappedWordIndex == i)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Text(words[i].translation, style: translationStyle),
+                  ),
+              ],
+            ),
+          ),
+      ],
+    );
   }
 
   /// Native share sheet where the browser has one; otherwise a clipboard

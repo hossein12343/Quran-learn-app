@@ -103,6 +103,18 @@ class AboutPage extends StatelessWidget {
               index: 7,
               child: _card(
                 context,
+                icon: Icons.touch_app_rounded,
+                title: 'معنای واژه‌به‌واژه',
+                body: 'با فعال‌کردن این حالت از بالای صفحهٔ هر سوره، لمس '
+                    'هر کلمه از آیه معنای فارسی همان کلمه را نشان '
+                    'می‌دهد — از طریق Quran.com.',
+              ),
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            Reveal(
+              index: 8,
+              child: _card(
+                context,
                 icon: Icons.block_flipped,
                 title: 'تعهد ما دربارهٔ تبلیغات',
                 body: 'حتی اگر در آینده تبلیغاتی به نسخهٔ رایگان اضافه '
