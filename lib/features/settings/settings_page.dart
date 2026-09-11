@@ -93,8 +93,8 @@ class SettingsPage extends StatelessWidget {
                 // — see plan.dart. This is the only place `qariId` is ever
                 // set, so it's also the only gate real playback needs.
                 onTap: (q.isPro && !appState.isPro)
-                    ? () => Navigator.of(context).push(
-                        MaterialPageRoute<void>(builder: (_) => const ProPage()))
+                    ? () => Navigator.of(context).push(MaterialPageRoute<void>(
+                        builder: (_) => const ProPage()))
                     : () => settings.setQari(q.id),
                 child: Container(
                   padding: const EdgeInsets.all(AppSpacing.md),
@@ -121,19 +121,16 @@ class SettingsPage extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(q.name,
-                                style:
-                                    Theme.of(context).textTheme.titleMedium),
+                                style: Theme.of(context).textTheme.titleMedium),
                             Text(q.style,
-                                style:
-                                    Theme.of(context).textTheme.bodySmall),
+                                style: Theme.of(context).textTheme.bodySmall),
                           ],
                         ),
                       ),
                       Directionality(
                         textDirection: TextDirection.rtl,
                         child: Text(q.nativeName,
-                            style:
-                                ArabicType.tile(color: AppColors.primary)),
+                            style: ArabicType.tile(color: AppColors.primary)),
                       ),
                     ],
                   ),
@@ -166,7 +163,9 @@ class SettingsPage extends StatelessWidget {
                       decoration: BoxDecoration(
                         color: settings.speed == s
                             ? AppColors.primary
-                            : Theme.of(context).colorScheme.surfaceContainerHighest,
+                            : Theme.of(context)
+                                .colorScheme
+                                .surfaceContainerHighest,
                         borderRadius: BorderRadius.circular(AppRadius.sm),
                       ),
                       child: Text(
@@ -273,7 +272,9 @@ class SettingsPage extends StatelessWidget {
         padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: on ? AppColors.primary : Theme.of(context).colorScheme.surfaceContainerHighest,
+          color: on
+              ? AppColors.primary
+              : Theme.of(context).colorScheme.surfaceContainerHighest,
           borderRadius: BorderRadius.circular(AppRadius.sm),
         ),
         child: Text(
@@ -341,8 +342,7 @@ class SettingsPage extends StatelessWidget {
     final blocked = settings.dailyReminder &&
         reminders.available &&
         !reminders.permissionGranted;
-    final canBackground =
-        reminders.pushSupported && appState.signedIn;
+    final canBackground = reminders.pushSupported && appState.signedIn;
     String subtitle;
     if (!reminders.available) {
       subtitle = 'اعلان مرورگر در این دستگاه در دسترس نیست.';
@@ -432,8 +432,10 @@ class SettingsPage extends StatelessWidget {
             ),
             child: Text(
               label,
-              style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                  color: on ? AppColors.primaryDeep : null),
+              style: Theme.of(context)
+                  .textTheme
+                  .labelLarge
+                  ?.copyWith(color: on ? AppColors.primaryDeep : null),
             ),
           ),
         ),
@@ -517,25 +519,25 @@ class SettingsPage extends StatelessWidget {
                 style: Theme.of(context).textTheme.bodyLarge),
             const Spacer(),
             IconButton(
+              tooltip: 'کم‌کردن ۵ دقیقه',
               onPressed: settings.reminderOffsetMinutes <= 0
                   ? null
                   : () {
                       settings.setReminderOffsetMinutes(
                           settings.reminderOffsetMinutes - 5);
-                      unawaited(
-                          resolvePrayerAnchoredReminderTime(force: true));
+                      unawaited(resolvePrayerAnchoredReminderTime(force: true));
                     },
               icon: const Icon(Icons.remove_circle_outline_rounded),
               color: AppColors.primary,
             ),
             IconButton(
+              tooltip: 'افزودن ۵ دقیقه',
               onPressed: settings.reminderOffsetMinutes >= 90
                   ? null
                   : () {
                       settings.setReminderOffsetMinutes(
                           settings.reminderOffsetMinutes + 5);
-                      unawaited(
-                          resolvePrayerAnchoredReminderTime(force: true));
+                      unawaited(resolvePrayerAnchoredReminderTime(force: true));
                     },
               icon: const Icon(Icons.add_circle_outline_rounded),
               color: AppColors.primary,
@@ -547,8 +549,7 @@ class SettingsPage extends StatelessWidget {
           valueListenable: prayerLookupStatus,
           builder: (context, status, _) {
             final h = settings.reminderTime.hour.toString().padLeft(2, '0');
-            final m =
-                settings.reminderTime.minute.toString().padLeft(2, '0');
+            final m = settings.reminderTime.minute.toString().padLeft(2, '0');
             final (text, color) = switch (status) {
               PrayerLookupStatus.loading => (
                   'در حال یافتن ساعت اذان…',
@@ -598,7 +599,8 @@ class SettingsPage extends StatelessWidget {
   /// those come from an actual Aladhan fetch, which
   /// `resolvePrayerAnchoredReminderTime` (already running at boot and on
   /// every prayer/offset change) supplies on its own next successful run.
-  void _syncPushReminder({required bool enabled, required int hour, required int minute}) {
+  void _syncPushReminder(
+      {required bool enabled, required int hour, required int minute}) {
     final anchored = settings.reminderAnchor == ReminderAnchor.afterPrayer;
     appState.syncPushReminder(
       enabled: enabled,
@@ -667,7 +669,8 @@ class SettingsPage extends StatelessWidget {
     if (picked == null) return;
     settings.setReminder(true, picked);
     if (appState.signedIn) {
-      _syncPushReminder(enabled: true, hour: picked.hour, minute: picked.minute);
+      _syncPushReminder(
+          enabled: true, hour: picked.hour, minute: picked.minute);
     }
   }
 

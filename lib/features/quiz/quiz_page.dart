@@ -295,8 +295,7 @@ class _QuizPageState extends State<QuizPage> {
         .fold<int>(0, (sum, i) => sum + i.lapses);
     appState.recordSession(
       surahNumber: widget.surah.number,
-      heldIndicesNow:
-          _s.items.where((i) => i.held).map((i) => i.index).toSet(),
+      heldIndicesNow: _s.items.where((i) => i.held).map((i) => i.index).toSet(),
       didSeal: didSeal,
       sealedChunk: sealedChunk,
       hadMistakes: _s.mistakes > 0,
@@ -334,8 +333,7 @@ class _QuizPageState extends State<QuizPage> {
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('خروج',
-                style: TextStyle(color: AppColors.error)),
+            child: const Text('خروج', style: TextStyle(color: AppColors.error)),
           ),
         ],
       ),
@@ -403,9 +401,11 @@ class _QuizPageState extends State<QuizPage> {
         children: [
           Pressable(
             onTap: _confirmLeave,
+            semanticLabel: 'خروج از جلسه',
             child: Padding(
               padding: const EdgeInsets.all(AppSpacing.sm),
-              child: Icon(Icons.close_rounded, size: 26, color: context.mutedColor),
+              child: Icon(Icons.close_rounded,
+                  size: 26, color: context.mutedColor),
             ),
           ),
           const SizedBox(width: AppSpacing.sm),
@@ -419,7 +419,8 @@ class _QuizPageState extends State<QuizPage> {
                 builder: (context, v, _) => LinearProgressIndicator(
                   value: v,
                   minHeight: 16,
-                  backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                  backgroundColor:
+                      Theme.of(context).colorScheme.surfaceContainerHighest,
                   valueColor: AlwaysStoppedAnimation<Color>(
                     _s.stage == Stage.gate
                         ? AppColors.secondary
@@ -477,6 +478,7 @@ class _QuizPageState extends State<QuizPage> {
           Center(
             child: Pressable(
               onTap: () => _playAyah(ex.ayahIndex),
+              semanticLabel: 'پخش این آیه',
               child: ValueListenableBuilder<bool>(
                 valueListenable: recitation.isPlaying,
                 builder: (context, playing, _) => Container(
@@ -487,7 +489,9 @@ class _QuizPageState extends State<QuizPage> {
                     color: AppColors.blue,
                   ),
                   child: Icon(
-                    playing ? Icons.volume_up_rounded : Icons.play_arrow_rounded,
+                    playing
+                        ? Icons.volume_up_rounded
+                        : Icons.play_arrow_rounded,
                     color: AppColors.white,
                     size: 40,
                   ),
@@ -578,6 +582,9 @@ class _QuizPageState extends State<QuizPage> {
                   const SizedBox(width: AppSpacing.md),
                   Pressable(
                     onTap: _reciteGrading ? null : () => _toggleReciteCheck(ex),
+                    semanticLabel: recording
+                        ? 'پایان ضبط و سنجش تلاوت'
+                        : 'شروع ضبط برای سنجش تلاوت',
                     child: Container(
                       width: 48,
                       height: 48,
@@ -594,7 +601,9 @@ class _QuizPageState extends State<QuizPage> {
                               ),
                             )
                           : Icon(
-                              recording ? Icons.stop_rounded : Icons.mic_rounded,
+                              recording
+                                  ? Icons.stop_rounded
+                                  : Icons.mic_rounded,
                               color: AppColors.white,
                             ),
                     ),
@@ -939,10 +948,8 @@ class _QuizPageState extends State<QuizPage> {
                   padding: const EdgeInsets.symmetric(
                       horizontal: AppSpacing.md, vertical: AppSpacing.md),
                   child: Text('راهنما',
-                      style: Theme.of(context)
-                          .textTheme
-                          .labelLarge
-                          ?.copyWith(color: AppColors.blue, letterSpacing: 0.6)),
+                      style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                          color: AppColors.blue, letterSpacing: 0.6)),
                 ),
               ),
             const Spacer(),
@@ -1054,7 +1061,10 @@ class _QuizPageState extends State<QuizPage> {
             style: Theme.of(context).textTheme.bodyLarge,
           ),
           const SizedBox(height: AppSpacing.xxl),
-          DuoButton(label: 'دوباره تلاش کنید', onTap: _tryAgain, color: AppColors.primary),
+          DuoButton(
+              label: 'دوباره تلاش کنید',
+              onTap: _tryAgain,
+              color: AppColors.primary),
           const SizedBox(height: AppSpacing.md),
           Center(
             child: Pressable(
@@ -1116,7 +1126,10 @@ class _QuizPageState extends State<QuizPage> {
                 ],
               ),
               const SizedBox(height: AppSpacing.xxl),
-              DuoButton(label: 'دریافت', onTap: _commitAndClose, color: AppColors.primary),
+              DuoButton(
+                  label: 'دریافت',
+                  onTap: _commitAndClose,
+                  color: AppColors.primary),
             ],
           ),
         ),

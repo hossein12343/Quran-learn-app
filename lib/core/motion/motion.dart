@@ -147,6 +147,16 @@ class Pressable extends StatefulWidget {
   final bool burst;
   final Color? burstColor;
 
+  /// An accessible name for a screen reader, for the common case where
+  /// [child] is a bare icon with no readable text of its own (unlike
+  /// `IconButton`, which gets this for free from its own `tooltip`
+  /// param, `Pressable` has no such built-in — every icon-only call
+  /// site needs to pass this explicitly). Leave null when [child]
+  /// already contains real text (a labeled button, a card with a
+  /// title) — wrapping that in another label would just duplicate
+  /// what a screen reader already announces from the text itself.
+  final String? semanticLabel;
+
   const Pressable({
     super.key,
     required this.child,
@@ -154,6 +164,7 @@ class Pressable extends StatefulWidget {
     this.scale = 0.965,
     this.burst = true,
     this.burstColor,
+    this.semanticLabel,
   });
 
   @override
@@ -167,7 +178,7 @@ class _PressableState extends State<Pressable> {
   @override
   Widget build(BuildContext context) {
     final on = widget.onTap != null;
-    return MouseRegion(
+    Widget result = MouseRegion(
       cursor: on ? SystemMouseCursors.click : MouseCursor.defer,
       onEnter: on ? (_) => setState(() => _hover = true) : null,
       onExit: on ? (_) => setState(() => _hover = false) : null,
@@ -193,6 +204,14 @@ class _PressableState extends State<Pressable> {
         ),
       ),
     );
+    if (widget.semanticLabel != null) {
+      result = Semantics(
+        button: true,
+        label: widget.semanticLabel,
+        child: ExcludeSemantics(child: result),
+      );
+    }
+    return result;
   }
 }
 

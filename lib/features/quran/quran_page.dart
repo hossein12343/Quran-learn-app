@@ -770,6 +770,7 @@ class _SurahReaderPageState extends State<SurahReaderPage> {
               if (recitation.available)
                 Pressable(
                   onTap: () => sounding ? _stop() : _startFrom(a.number),
+                  semanticLabel: sounding ? 'توقف تلاوت' : 'پخش تلاوت این آیه',
                   child: Padding(
                     padding: const EdgeInsets.all(4),
                     child: Icon(
@@ -785,6 +786,7 @@ class _SurahReaderPageState extends State<SurahReaderPage> {
               Pressable(
                 onTap: () =>
                     appState.toggleBookmark(widget.surah.number, a.number),
+                semanticLabel: bookmarked ? 'حذف نشان' : 'نشان‌کردن این آیه',
                 child: Padding(
                   padding: const EdgeInsets.all(4),
                   child: Icon(
@@ -801,6 +803,7 @@ class _SurahReaderPageState extends State<SurahReaderPage> {
                 const SizedBox(width: AppSpacing.md),
                 Pressable(
                   onTap: () => _shareAyah(a),
+                  semanticLabel: 'اشتراک‌گذاری این آیه',
                   child: Padding(
                     padding: const EdgeInsets.all(4),
                     child: Icon(Icons.share_rounded,
@@ -811,6 +814,9 @@ class _SurahReaderPageState extends State<SurahReaderPage> {
               const SizedBox(width: AppSpacing.md),
               Pressable(
                 onTap: () => _toggleTafsir(a),
+                semanticLabel: _tafsirOpenAyah == a.number
+                    ? 'بستن تفسیر'
+                    : 'نمایش تفسیر این آیه',
                 child: Padding(
                   padding: const EdgeInsets.all(4),
                   child: Icon(
@@ -825,6 +831,9 @@ class _SurahReaderPageState extends State<SurahReaderPage> {
               const SizedBox(width: AppSpacing.md),
               Pressable(
                 onTap: () => _editNote(a),
+                semanticLabel: AyahNotes.has(widget.surah.number, a.number)
+                    ? 'ویرایش یادداشت این آیه'
+                    : 'افزودن یادداشت برای این آیه',
                 child: Padding(
                   padding: const EdgeInsets.all(4),
                   child: Icon(
