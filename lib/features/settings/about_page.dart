@@ -22,8 +22,10 @@ class AboutPage extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(
               AppSpacing.xl, AppSpacing.lg, AppSpacing.xl, AppSpacing.xxxl),
           children: [
-            Reveal(index: 0, child: Icon(Icons.menu_book_rounded,
-                size: 40, color: AppColors.primary)),
+            Reveal(
+                index: 0,
+                child: Icon(Icons.menu_book_rounded,
+                    size: 40, color: AppColors.primary)),
             const SizedBox(height: AppSpacing.md),
             Reveal(
               index: 1,
@@ -74,6 +76,19 @@ class AboutPage extends StatelessWidget {
             const SizedBox(height: AppSpacing.lg),
             Reveal(
               index: 5,
+              child: _card(
+                context,
+                icon: Icons.format_color_text_rounded,
+                title: 'رنگ‌آمیزی تجوید',
+                body: 'قوانین تجوید (رنگ‌آمیزی حروف بر اساس قواعد تلفظ) از '
+                    'ویرایش quran-tajweed سرویس Al Quran Cloud '
+                    '(alquran.cloud) دریافت شده — بر پایهٔ متن عثمانی '
+                    'Tanzil.',
+              ),
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            Reveal(
+              index: 6,
               child: _card(
                 context,
                 icon: Icons.block_flipped,

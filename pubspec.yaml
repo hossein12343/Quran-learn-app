@@ -20,6 +20,7 @@ flutter:
   uses-material-design: true
   assets:
     - assets/quran_full.json
+    - assets/quran_tajweed.json
     - assets/branding/app_logo.png
   fonts:
     - family: Amiri

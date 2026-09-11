@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/theme/app_theme.dart';
 import '../../shared/data/quran_seed.dart';
+import '../../shared/data/tajweed_data.dart';
 import '../../shared/services/app_state.dart';
 import '../../shared/services/oauth/web_nav.dart';
 import '../auth/auth_pages.dart';
@@ -64,6 +65,11 @@ class _SplashPageState extends State<SplashPage> {
     // quran_seed.dart). The app opens on the 4-surah fallback immediately.
     // ignore: unawaited_futures
     loadFullQuran();
+    // Same "don't block the splash on it" reasoning as loadFullQuran —
+    // tajweed coloring is an opt-in reading aid (see Settings), not
+    // something the app needs before it can open.
+    // ignore: unawaited_futures
+    loadTajweedData();
     await Future<void>.delayed(const Duration(milliseconds: 300));
     if (!mounted) return;
     if (signedInByGoogle) {

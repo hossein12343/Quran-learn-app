@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import '../../core/motion/motion.dart';
 import '../../core/theme/app_theme.dart';
 import '../../shared/data/quran_seed.dart';
+import '../../shared/data/tajweed_data.dart';
+import '../../shared/data/tajweed_parser.dart';
 import '../../shared/services/app_state.dart';
 import '../../shared/services/audio.dart';
 import '../../shared/services/offline_audio.dart';
@@ -328,11 +330,14 @@ class _SurahReaderPageState extends State<SurahReaderPage> {
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
-      animation: Listenable.merge([appState, settings]),
+      animation: Listenable.merge([appState, settings, tajweedRevision]),
       builder: (context, _) => Scaffold(
         appBar: AppBar(
           title: Text(widget.surah.englishName),
-          actions: [if (offlineAudio.available) _downloadAction(context)],
+          actions: [
+            if (tajweedLoaded) _tajweedToggle(context),
+            if (offlineAudio.available) _downloadAction(context),
+          ],
         ),
         body: ListView.builder(
           controller: _sc,
@@ -388,6 +393,38 @@ class _SurahReaderPageState extends State<SurahReaderPage> {
         color: downloaded ? AppColors.primary : null,
       ),
     );
+  }
+
+  /// Toggles rule-colored tajweed rendering for the whole reader — a
+  /// per-user preference (`settings.tajweedEnabled`), not per-surah state,
+  /// so it stays on/off consistently as someone moves between surahs.
+  Widget _tajweedToggle(BuildContext context) {
+    final on = settings.tajweedEnabled;
+    return IconButton(
+      tooltip: on ? 'خاموش‌کردن رنگ‌آمیزی تجوید' : 'رنگ‌آمیزی تجوید',
+      onPressed: () => settings.setTajweedEnabled(!on),
+      icon: Icon(
+        Icons.format_color_text_rounded,
+        color: on ? AppColors.primary : null,
+      ),
+    );
+  }
+
+  /// Plain ayah text, unless the tajweed toggle is on *and* rule data
+  /// actually loaded for this ayah — falls back to the ordinary `Text`
+  /// rather than routing through the parser at all when either is false,
+  /// so turning the toggle off is guaranteed to look exactly like it did
+  /// before this feature existed.
+  Widget _ayahText(BuildContext context, Ayah a) {
+    final style = ArabicType.ayah(
+      size: 27 * settings.arabicScale,
+      color: Theme.of(context).textTheme.bodyLarge?.color,
+    );
+    final raw = settings.tajweedEnabled
+        ? tajweedTextFor(widget.surah.number, a.number)
+        : null;
+    if (raw == null) return Text(a.arabic, style: style);
+    return Text.rich(TextSpan(children: parseTajweed(raw, style)));
   }
 
   Widget _ayahCard(Ayah a, int i) {
@@ -459,13 +496,7 @@ class _SurahReaderPageState extends State<SurahReaderPage> {
           const SizedBox(height: AppSpacing.md),
           Directionality(
             textDirection: TextDirection.rtl,
-            child: Text(
-              a.arabic,
-              style: ArabicType.ayah(
-                size: 27 * settings.arabicScale,
-                color: Theme.of(context).textTheme.bodyLarge?.color,
-              ),
-            ),
+            child: _ayahText(context, a),
           ),
           const SizedBox(height: AppSpacing.md),
           Text(a.translation, style: Theme.of(context).textTheme.bodyMedium),

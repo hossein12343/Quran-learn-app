@@ -135,13 +135,18 @@ class Settings extends ChangeNotifier {
   /// same reason — layouts stop being tested past it.
   double uiTextScale = 1.0;
 
-  Qari get qari =>
-      knownQaris.firstWhere((q) => q.id == qariId, orElse: () => knownQaris.first);
+  /// Colors each ayah by tajweed rule (see `shared/data/tajweed_parser.dart`)
+  /// in the Qur'an reader. Off by default — this is a reading aid for
+  /// people actively working on pronunciation, not how most people expect
+  /// their first look at an ayah to render.
+  bool tajweedEnabled = false;
+
+  Qari get qari => knownQaris.firstWhere((q) => q.id == qariId,
+      orElse: () => knownQaris.first);
 
   bool get isRtl => language == 'fa';
 
-  TextDirection get direction =>
-      isRtl ? TextDirection.rtl : TextDirection.ltr;
+  TextDirection get direction => isRtl ? TextDirection.rtl : TextDirection.ltr;
 
   void setQari(String id) {
     qariId = id;
@@ -227,6 +232,12 @@ class Settings extends ChangeNotifier {
     _save();
   }
 
+  void setTajweedEnabled(bool on) {
+    tajweedEnabled = on;
+    notifyListeners();
+    _save();
+  }
+
   /// Restores saved settings on this device. Called once at app boot.
   void restore() {
     final raw = LocalStore.get('settings');
@@ -248,10 +259,11 @@ class Settings extends ChangeNotifier {
           (s['reminderAnchor'] as num?)?.toInt() ?? reminderAnchor.index];
       reminderPrayer = Prayer.values[
           (s['reminderPrayer'] as num?)?.toInt() ?? reminderPrayer.index];
-      reminderOffsetMinutes =
-          (s['reminderOffsetMinutes'] as num?)?.toInt() ?? reminderOffsetMinutes;
+      reminderOffsetMinutes = (s['reminderOffsetMinutes'] as num?)?.toInt() ??
+          reminderOffsetMinutes;
       arabicScale = (s['arabicScale'] as num?)?.toDouble() ?? arabicScale;
       uiTextScale = (s['uiTextScale'] as num?)?.toDouble() ?? uiTextScale;
+      tajweedEnabled = s['tajweedEnabled'] as bool? ?? tajweedEnabled;
     } on Object {
       // Corrupt local settings — keep defaults.
     }
@@ -274,6 +286,7 @@ class Settings extends ChangeNotifier {
         'reminderOffsetMinutes': reminderOffsetMinutes,
         'arabicScale': arabicScale,
         'uiTextScale': uiTextScale,
+        'tajweedEnabled': tajweedEnabled,
       }),
     );
   }
