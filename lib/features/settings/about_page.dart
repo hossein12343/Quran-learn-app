@@ -91,6 +91,18 @@ class AboutPage extends StatelessWidget {
               index: 6,
               child: _card(
                 context,
+                icon: Icons.swap_horiz_rounded,
+                title: 'ترجمهٔ دوم',
+                body: 'برای مقایسه، ترجمهٔ دیگری هم در دسترس است (قابل '
+                    'فعال‌سازی از دکمهٔ بالای صفحهٔ هر سوره) که از '
+                    'IslamHouse.com، از طریق Quran.com دریافت شده است.',
+              ),
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            Reveal(
+              index: 7,
+              child: _card(
+                context,
                 icon: Icons.block_flipped,
                 title: 'تعهد ما دربارهٔ تبلیغات',
                 body: 'حتی اگر در آینده تبلیغاتی به نسخهٔ رایگان اضافه '

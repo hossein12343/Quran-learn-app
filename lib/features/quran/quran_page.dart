@@ -4,6 +4,7 @@ import '../../core/theme/app_theme.dart';
 import '../../shared/data/quran_seed.dart';
 import '../../shared/data/tajweed_data.dart';
 import '../../shared/data/tajweed_parser.dart';
+import '../../shared/data/translation2.dart';
 import '../../shared/services/app_state.dart';
 import '../../shared/services/audio.dart';
 import '../../shared/services/offline_audio.dart';
@@ -417,6 +418,7 @@ class _SurahReaderPageState extends State<SurahReaderPage> {
         appBar: AppBar(
           title: Text(widget.surah.englishName),
           actions: [
+            _translation2Toggle(context),
             if (tajweedLoaded) _tajweedToggle(context),
             if (offlineAudio.available) _downloadAction(context),
           ],
@@ -474,6 +476,40 @@ class _SurahReaderPageState extends State<SurahReaderPage> {
             : Icons.download_for_offline_outlined,
         color: downloaded ? AppColors.primary : null,
       ),
+    );
+  }
+
+  bool _loadingTranslation2 = false;
+
+  /// Switches between the default translation and the second one (see
+  /// `shared/data/translation2.dart`), lazily loading it on the very
+  /// first tap rather than at startup — this is an opt-in comparison
+  /// toggle, not something every session needs to pay the fetch for.
+  Future<void> _toggleTranslation2() async {
+    if (!settings.useTranslation2 && !translation2Loaded) {
+      setState(() => _loadingTranslation2 = true);
+      await loadTranslation2();
+      if (!mounted) return;
+      setState(() => _loadingTranslation2 = false);
+    }
+    settings.setUseTranslation2(!settings.useTranslation2);
+  }
+
+  Widget _translation2Toggle(BuildContext context) {
+    final on = settings.useTranslation2;
+    return IconButton(
+      tooltip: on ? 'بازگشت به ترجمهٔ پیش‌فرض' : 'ترجمهٔ دیگر',
+      onPressed: _loadingTranslation2 ? null : _toggleTranslation2,
+      icon: _loadingTranslation2
+          ? const SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          : Icon(
+              Icons.swap_horiz_rounded,
+              color: on ? AppColors.primary : null,
+            ),
     );
   }
 
@@ -621,7 +657,13 @@ class _SurahReaderPageState extends State<SurahReaderPage> {
             child: _ayahText(context, a),
           ),
           const SizedBox(height: AppSpacing.md),
-          Text(a.translation, style: Theme.of(context).textTheme.bodyMedium),
+          Text(
+            (settings.useTranslation2
+                    ? translation2For(widget.surah.number, a.number)
+                    : null) ??
+                a.translation,
+            style: Theme.of(context).textTheme.bodyMedium,
+          ),
         ],
       ),
     );

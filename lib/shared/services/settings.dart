@@ -141,6 +141,10 @@ class Settings extends ChangeNotifier {
   /// their first look at an ayah to render.
   bool tajweedEnabled = false;
 
+  /// Shows the second Persian translation (IslamHouse.com, see
+  /// `shared/data/translation2.dart`) instead of the default one.
+  bool useTranslation2 = false;
+
   Qari get qari => knownQaris.firstWhere((q) => q.id == qariId,
       orElse: () => knownQaris.first);
 
@@ -238,6 +242,12 @@ class Settings extends ChangeNotifier {
     _save();
   }
 
+  void setUseTranslation2(bool on) {
+    useTranslation2 = on;
+    notifyListeners();
+    _save();
+  }
+
   /// Restores saved settings on this device. Called once at app boot.
   void restore() {
     final raw = LocalStore.get('settings');
@@ -264,6 +274,7 @@ class Settings extends ChangeNotifier {
       arabicScale = (s['arabicScale'] as num?)?.toDouble() ?? arabicScale;
       uiTextScale = (s['uiTextScale'] as num?)?.toDouble() ?? uiTextScale;
       tajweedEnabled = s['tajweedEnabled'] as bool? ?? tajweedEnabled;
+      useTranslation2 = s['useTranslation2'] as bool? ?? useTranslation2;
     } on Object {
       // Corrupt local settings — keep defaults.
     }
@@ -287,6 +298,7 @@ class Settings extends ChangeNotifier {
         'arabicScale': arabicScale,
         'uiTextScale': uiTextScale,
         'tajweedEnabled': tajweedEnabled,
+        'useTranslation2': useTranslation2,
       }),
     );
   }
