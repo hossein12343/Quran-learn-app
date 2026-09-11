@@ -7,6 +7,7 @@ import '../../core/widgets/mascot.dart';
 import '../../core/widgets/pattern_overlay.dart';
 import '../../shared/data/quran_seed.dart';
 import '../../shared/services/app_state.dart';
+import '../../shared/services/hijri_date.dart';
 import '../prayer_times/prayer_times_page.dart';
 import '../profile/pro_page.dart';
 import '../qibla/qibla_page.dart';
@@ -30,11 +31,20 @@ class _HomePageState extends State<HomePage> {
   /// only the header.
   final ValueNotifier<double> _offset = ValueNotifier<double>(0);
 
+  /// Null until the fetch resolves (or fails) — the header just shows
+  /// the greeting alone until then, and stays that way silently on
+  /// failure rather than showing an error for what's a nice-to-have
+  /// caption, not core functionality.
+  HijriToday? _hijriToday;
+
   @override
   void initState() {
     super.initState();
     _sc.addListener(() {
       _offset.value = _sc.offset;
+    });
+    fetchHijriToday().then((h) {
+      if (mounted) setState(() => _hijriToday = h);
     });
   }
 
@@ -130,6 +140,14 @@ class _HomePageState extends State<HomePage> {
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: Theme.of(context).textTheme.headlineMedium),
+                        if (_hijriToday != null) ...[
+                          const SizedBox(height: 2),
+                          Text(_hijriToday!.label,
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodySmall
+                                  ?.copyWith(color: context.mutedColor)),
+                        ],
                       ],
                     ),
                   ),
