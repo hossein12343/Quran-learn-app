@@ -55,11 +55,21 @@ Future<void> resolvePrayerAnchoredReminderTime({bool force = false}) async {
       _addMinutes(times[settings.reminderPrayer], settings.reminderOffsetMinutes);
   settings.setResolvedReminderTime(resolved);
   if (settings.dailyReminder && appState.signedIn) {
+    // hour/minute still go along as the fallback the server-side cron
+    // uses if *it* can't reach Aladhan at send time; anchor/prayer/offset/
+    // lat/lon are what let it look the real azan time up itself instead,
+    // fresh, every day, with no dependency on this tab ever being open
+    // again (see send-daily-reminders' doc comment).
     appState.syncPushReminder(
       enabled: true,
       hour: resolved.hour,
       minute: resolved.minute,
       timezone: reminders.timezone,
+      anchor: 'prayer',
+      prayer: settings.reminderPrayer.name,
+      offsetMinutes: settings.reminderOffsetMinutes,
+      lat: times.latitude,
+      lon: times.longitude,
     );
   }
 }

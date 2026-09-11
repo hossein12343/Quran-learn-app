@@ -385,6 +385,16 @@ class SettingsPage extends StatelessWidget {
             settings.setReminderAnchor(value);
             if (value == ReminderAnchor.afterPrayer) {
               unawaited(resolvePrayerAnchoredReminderTime(force: true));
+            } else if (settings.dailyReminder && appState.signedIn) {
+              // Switching back to a fixed time: tell the server right
+              // away rather than waiting for some other sync — otherwise
+              // it would keep computing against the just-abandoned prayer
+              // setting until the next unrelated reminder change.
+              _syncPushReminder(
+                enabled: true,
+                hour: settings.reminderTime.hour,
+                minute: settings.reminderTime.minute,
+              );
             }
           },
           child: Container(
@@ -485,16 +495,24 @@ class SettingsPage extends StatelessWidget {
             IconButton(
               onPressed: settings.reminderOffsetMinutes <= 0
                   ? null
-                  : () => settings.setReminderOffsetMinutes(
-                      settings.reminderOffsetMinutes - 5),
+                  : () {
+                      settings.setReminderOffsetMinutes(
+                          settings.reminderOffsetMinutes - 5);
+                      unawaited(
+                          resolvePrayerAnchoredReminderTime(force: true));
+                    },
               icon: const Icon(Icons.remove_circle_outline_rounded),
               color: AppColors.primary,
             ),
             IconButton(
               onPressed: settings.reminderOffsetMinutes >= 90
                   ? null
-                  : () => settings.setReminderOffsetMinutes(
-                      settings.reminderOffsetMinutes + 5),
+                  : () {
+                      settings.setReminderOffsetMinutes(
+                          settings.reminderOffsetMinutes + 5);
+                      unawaited(
+                          resolvePrayerAnchoredReminderTime(force: true));
+                    },
               icon: const Icon(Icons.add_circle_outline_rounded),
               color: AppColors.primary,
             ),
@@ -549,15 +567,34 @@ class SettingsPage extends StatelessWidget {
     );
   }
 
+  /// Wraps `AppState.syncPushReminder` with whatever anchor/prayer/offset
+  /// the user currently has picked, so every call site here — the master
+  /// toggle, the manual time picker — keeps the server's copy consistent
+  /// with Settings, not just the hour/minute. Doesn't carry lat/lon:
+  /// those come from an actual Aladhan fetch, which
+  /// `resolvePrayerAnchoredReminderTime` (already running at boot and on
+  /// every prayer/offset change) supplies on its own next successful run.
+  void _syncPushReminder({required bool enabled, required int hour, required int minute}) {
+    final anchored = settings.reminderAnchor == ReminderAnchor.afterPrayer;
+    appState.syncPushReminder(
+      enabled: enabled,
+      hour: hour,
+      minute: minute,
+      timezone: reminders.timezone,
+      anchor: anchored ? 'prayer' : 'fixed',
+      prayer: anchored ? settings.reminderPrayer.name : null,
+      offsetMinutes: anchored ? settings.reminderOffsetMinutes : null,
+    );
+  }
+
   Future<void> _onReminderToggle(BuildContext context, bool v) async {
     if (!v) {
       settings.setReminder(false);
       if (appState.signedIn) {
-        appState.syncPushReminder(
+        _syncPushReminder(
           enabled: false,
           hour: settings.reminderTime.hour,
           minute: settings.reminderTime.minute,
-          timezone: reminders.timezone,
         );
       }
       return;
@@ -590,11 +627,10 @@ class SettingsPage extends StatelessWidget {
       }
     }
     if (appState.signedIn) {
-      appState.syncPushReminder(
+      _syncPushReminder(
         enabled: true,
         hour: settings.reminderTime.hour,
         minute: settings.reminderTime.minute,
-        timezone: reminders.timezone,
       );
     }
   }
@@ -607,12 +643,7 @@ class SettingsPage extends StatelessWidget {
     if (picked == null) return;
     settings.setReminder(true, picked);
     if (appState.signedIn) {
-      appState.syncPushReminder(
-        enabled: true,
-        hour: picked.hour,
-        minute: picked.minute,
-        timezone: reminders.timezone,
-      );
+      _syncPushReminder(enabled: true, hour: picked.hour, minute: picked.minute);
     }
   }
 

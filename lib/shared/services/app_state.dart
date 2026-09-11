@@ -653,17 +653,35 @@ class AppState extends ChangeNotifier {
   /// this account. A no-op (silently) if not signed in — push reminders
   /// are the one tier of this feature that genuinely needs an account,
   /// since there's no way to address an anonymous local user server-side.
+  /// [hour]/[minute] are always sent — the fallback the server-side
+  /// reminder cron uses if a prayer-anchored lookup can't run that moment
+  /// (see the `send-daily-reminders` Edge Function). The prayer-anchor
+  /// fields are optional and only included in the update when given, so a
+  /// plain fixed-time sync (from `_pickReminderTime`) doesn't have to know
+  /// or care about them; pass `anchor: 'fixed'` explicitly when switching
+  /// away from prayer mode so the server stops trying a stale prayer/
+  /// coordinate combination for this account.
   void syncPushReminder({
     required bool enabled,
     required int hour,
     required int minute,
     required String? timezone,
+    String? anchor,
+    String? prayer,
+    int? offsetMinutes,
+    double? lat,
+    double? lon,
   }) {
     _pushProfileFields({
       'push_reminder_enabled': enabled,
       'reminder_hour': hour,
       'reminder_minute': minute,
       if (timezone != null) 'timezone': timezone,
+      if (anchor != null) 'reminder_anchor': anchor,
+      if (prayer != null) 'reminder_prayer': prayer,
+      if (offsetMinutes != null) 'reminder_offset_minutes': offsetMinutes,
+      if (lat != null) 'reminder_lat': lat,
+      if (lon != null) 'reminder_lon': lon,
     });
   }
 

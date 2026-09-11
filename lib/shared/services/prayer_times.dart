@@ -14,13 +14,19 @@ extension PrayerLabel on Prayer {
       };
 }
 
-/// One day's five prayer times, in the device's local time.
+/// One day's five prayer times, in the device's local time, plus the
+/// coordinates they were calculated for — carried along so a caller that
+/// wants to sync a server-side reminder (see `prayer_reminder.dart`) has
+/// them without a separate lookup; the location service that produced
+/// this already resolved them to fetch the times themselves.
 class PrayerTimes {
   final TimeOfDay fajr;
   final TimeOfDay dhuhr;
   final TimeOfDay asr;
   final TimeOfDay maghrib;
   final TimeOfDay isha;
+  final double latitude;
+  final double longitude;
 
   const PrayerTimes({
     required this.fajr,
@@ -28,6 +34,8 @@ class PrayerTimes {
     required this.asr,
     required this.maghrib,
     required this.isha,
+    required this.latitude,
+    required this.longitude,
   });
 
   TimeOfDay operator [](Prayer p) => switch (p) {

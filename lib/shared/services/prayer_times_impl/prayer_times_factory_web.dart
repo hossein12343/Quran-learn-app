@@ -51,6 +51,8 @@ class WebPrayerTimesService implements PrayerTimesService {
         asr: parse('Asr'),
         maghrib: parse('Maghrib'),
         isha: parse('Isha'),
+        latitude: loc.$1,
+        longitude: loc.$2,
       );
     } on Object {
       // Network failure, denied permission, malformed response — best
