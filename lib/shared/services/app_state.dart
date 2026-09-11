@@ -37,7 +37,16 @@ class AppState extends ChangeNotifier {
   /// not worth a schema change for.
   int lastCelebratedStreakMilestone = 0;
 
-  static const List<int> streakMilestones = <int>[3, 7, 14, 30, 50, 100, 200, 365];
+  static const List<int> streakMilestones = <int>[
+    3,
+    7,
+    14,
+    30,
+    50,
+    100,
+    200,
+    365
+  ];
 
   /// The highest not-yet-celebrated milestone [currentStreak] has reached,
   /// or null if there isn't one. Home shows a one-time celebration for
@@ -288,6 +297,14 @@ class AppState extends ChangeNotifier {
   String? syncNotice;
   bool get hasSyncedAccount => _authToken != null;
 
+  /// Exposed for other services that need to call `Backend` themselves
+  /// (e.g. `circles.dart`) rather than routing everything through
+  /// `AppState` — it already owns the session, so it stays the one place
+  /// that refreshes/clears these, but doesn't need to own every feature
+  /// that happens to need them.
+  String? get authToken => _authToken;
+  String? get userId => _userId;
+
   /// Backward-compatible view: every existing screen reads `held[n]` as a
   /// plain count, which still works because Map access syntax is identical
   /// whether the map is stored or computed.
@@ -484,8 +501,7 @@ class AppState extends ChangeNotifier {
       await _pullBookmarks();
       syncNotice = null;
     } on NetException catch (e) {
-      syncNotice =
-          'برخی اطلاعات هنوز همگام نشده — کمی بعد دوباره امتحان کنید.';
+      syncNotice = 'برخی اطلاعات هنوز همگام نشده — کمی بعد دوباره امتحان کنید.';
       AppLog.warn('Post-signin sync failed', error: e);
     }
     notifyListeners();
@@ -554,8 +570,7 @@ class AppState extends ChangeNotifier {
   /// message instead of redirecting into a raw JSON error page.
   Future<void> startGoogleSignIn(String redirectUrl) async {
     if (!await Backend.isGoogleSignInEnabled()) {
-      throw const NetException(
-          'ورود با گوگل هنوز روی سرور تنظیم نشده است.');
+      throw const NetException('ورود با گوگل هنوز روی سرور تنظیم نشده است.');
     }
     WebNav.redirectTo(Backend.googleAuthUrl(redirectUrl));
   }
@@ -602,7 +617,7 @@ class AppState extends ChangeNotifier {
           // already on the profile shows first and this corrects it a
           // moment later, same as `_finishSigningIn`'s own fields do.
           final googleName = (session.metadata['full_name'] ??
-                  session.metadata['name']) as String?;
+              session.metadata['name']) as String?;
           if (googleName != null && googleName.isNotEmpty) {
             displayName = googleName;
             _pushProfileFields({'display_name': googleName});
@@ -615,8 +630,7 @@ class AppState extends ChangeNotifier {
           AppLog.error('Google sign-in failed to complete', error: e);
           return false;
         }
-        await Future<void>.delayed(
-            Duration(milliseconds: 500 * (attempt + 1)));
+        await Future<void>.delayed(Duration(milliseconds: 500 * (attempt + 1)));
       }
     }
   }
@@ -757,7 +771,8 @@ class AppState extends ChangeNotifier {
       reviewCleanRecalls[key] = next.reps;
       reviewEase[key] = next.ease;
       reviewInterval[key] = next.intervalDays;
-      reviewDue[key] = ReviewSchedule.dueDate(DateTime.now(), next.intervalDays);
+      reviewDue[key] =
+          ReviewSchedule.dueDate(DateTime.now(), next.intervalDays);
     }
     if (didSeal) {
       sealed.add(surahNumber);
@@ -785,7 +800,9 @@ class AppState extends ChangeNotifier {
         surah: surahNumber,
         heldCount: heldIndicesNow.length,
         sealed: sealed.contains(surahNumber),
-      ).catchError((e) => AppLog.warn('Progress sync failed for surah $surahNumber', error: e)));
+      ).catchError((e) => AppLog.warn(
+          'Progress sync failed for surah $surahNumber',
+          error: e)));
     }
   }
 
@@ -868,8 +885,10 @@ class AppState extends ChangeNotifier {
     final name = record['display_name'] as String?;
     if (name != null && name.isNotEmpty) displayName = name;
     totalXp = (record['total_xp'] as num?)?.toInt() ?? totalXp;
-    currentStreak = (record['current_streak'] as num?)?.toInt() ?? currentStreak;
-    longestStreak = (record['longest_streak'] as num?)?.toInt() ?? longestStreak;
+    currentStreak =
+        (record['current_streak'] as num?)?.toInt() ?? currentStreak;
+    longestStreak =
+        (record['longest_streak'] as num?)?.toInt() ?? longestStreak;
     final remoteActiveDate = record['last_active_date'] as String?;
     if (remoteActiveDate != null && remoteActiveDate.isNotEmpty) {
       lastActiveDate = remoteActiveDate;
@@ -960,7 +979,8 @@ class AppState extends ChangeNotifier {
     if (heldRaw != null) {
       _heldAyat.clear();
       heldRaw.forEach((k, v) {
-        _heldAyat[int.parse(k)] = Set<int>.from((v as List).map((e) => e as int));
+        _heldAyat[int.parse(k)] =
+            Set<int>.from((v as List).map((e) => e as int));
       });
     }
     final sealedRaw = snap['sealed'] as List?;
@@ -982,7 +1002,8 @@ class AppState extends ChangeNotifier {
         reviewDue[int.parse(k)] = DateTime.parse(v as String);
       });
     }
-    final reviewRecallsRaw = snap['reviewCleanRecalls'] as Map<String, dynamic>?;
+    final reviewRecallsRaw =
+        snap['reviewCleanRecalls'] as Map<String, dynamic>?;
     if (reviewRecallsRaw != null) {
       reviewCleanRecalls.clear();
       reviewRecallsRaw.forEach((k, v) {

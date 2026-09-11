@@ -152,7 +152,8 @@ class Backend {
     if (!res.ok) throw _pgException(res.body);
     final rows = jsonDecode(res.body) as List;
     if (rows.isEmpty) {
-      throw const NetException('پروفایل هنوز آماده نیست. کمی بعد دوباره امتحان کنید.');
+      throw const NetException(
+          'پروفایل هنوز آماده نیست. کمی بعد دوباره امتحان کنید.');
     }
     return rows.first as Map<String, dynamic>;
   }
@@ -213,8 +214,7 @@ class Backend {
 
   // ------------------------------------------------------------- bookmarks
 
-  static Future<List<Map<String, dynamic>>> listBookmarks(
-      String token) async {
+  static Future<List<Map<String, dynamic>>> listBookmarks(String token) async {
     final res = await Net.request(
       'GET',
       '$baseUrl/rest/v1/bookmarks?select=*&order=created_at.desc',
@@ -279,10 +279,133 @@ class Backend {
     if (!res.ok) throw _pgException(res.body);
   }
 
-  static Future<void> deletePushSubscription(String token, String endpoint) async {
+  static Future<void> deletePushSubscription(
+      String token, String endpoint) async {
     final res = await Net.request(
       'DELETE',
       '$baseUrl/rest/v1/push_subscriptions?endpoint=eq.${Uri.encodeComponent(endpoint)}',
+      headers: _headers(token),
+    );
+    if (!res.ok) throw _pgException(res.body);
+  }
+
+  // --------------------------------------------------------------- circles
+
+  /// The circle this user owns, if any — one per owner, matching the
+  /// "family/teacher circle" shape (a single dashboard, not many). Null
+  /// when they've never created one.
+  static Future<Map<String, dynamic>?> getOwnedCircle(
+      String token, String ownerId) async {
+    final res = await Net.request(
+      'GET',
+      '$baseUrl/rest/v1/circles?owner_id=eq.$ownerId&select=*',
+      headers: _headers(token),
+    );
+    if (!res.ok) throw _pgException(res.body);
+    final rows = jsonDecode(res.body) as List;
+    return rows.isEmpty ? null : rows.first as Map<String, dynamic>;
+  }
+
+  static Future<Map<String, dynamic>> createCircle(
+    String token, {
+    required String ownerId,
+    required String name,
+    required String inviteCode,
+  }) async {
+    final res = await Net.request(
+      'POST',
+      '$baseUrl/rest/v1/circles',
+      headers: {..._headers(token), 'Prefer': 'return=representation'},
+      body: {'owner_id': ownerId, 'name': name, 'invite_code': inviteCode},
+    );
+    if (!res.ok) throw _pgException(res.body);
+    final rows = jsonDecode(res.body) as List;
+    return rows.first as Map<String, dynamic>;
+  }
+
+  static Future<void> updateCircle(
+    String token,
+    String circleId, {
+    String? name,
+    String? inviteCode,
+  }) async {
+    final res = await Net.request(
+      'PATCH',
+      '$baseUrl/rest/v1/circles?id=eq.$circleId',
+      headers: {..._headers(token), 'Prefer': 'return=minimal'},
+      body: {
+        if (name != null) 'name': name,
+        if (inviteCode != null) 'invite_code': inviteCode,
+      },
+    );
+    if (!res.ok) throw _pgException(res.body);
+  }
+
+  static Future<void> deleteCircle(String token, String circleId) async {
+    final res = await Net.request(
+      'DELETE',
+      '$baseUrl/rest/v1/circles?id=eq.$circleId',
+      headers: _headers(token),
+    );
+    if (!res.ok) throw _pgException(res.body);
+  }
+
+  /// Members of a circle the caller owns, each with the profile fields the
+  /// dashboard shows — one request via PostgREST's embedded-resource
+  /// select, made possible by `circle_members.user_id` referencing
+  /// `profiles(id)` directly (see the migration).
+  static Future<List<Map<String, dynamic>>> listCircleMembers(
+      String token, String circleId) async {
+    final res = await Net.request(
+      'GET',
+      '$baseUrl/rest/v1/circle_members?circle_id=eq.$circleId'
+          '&select=user_id,joined_at,profiles(display_name,total_xp,'
+          'current_streak,longest_streak,last_active_date,is_pro)',
+      headers: _headers(token),
+    );
+    if (!res.ok) throw _pgException(res.body);
+    return (jsonDecode(res.body) as List).cast<Map<String, dynamic>>();
+  }
+
+  /// Circles the caller has joined as a member (not owns) — for the "I'm
+  /// part of these" list, and for leaving one.
+  static Future<List<Map<String, dynamic>>> listJoinedCircles(
+      String token) async {
+    final res = await Net.request(
+      'GET',
+      '$baseUrl/rest/v1/circle_members?select=circle_id,joined_at,'
+          'circles(id,name,owner_id)',
+      headers: _headers(token),
+    );
+    if (!res.ok) throw _pgException(res.body);
+    return (jsonDecode(res.body) as List).cast<Map<String, dynamic>>();
+  }
+
+  /// Redeems an invite code. The actual membership insert happens inside
+  /// `join_circle_by_code`, a `SECURITY DEFINER` function — RLS on
+  /// `circle_members` deliberately has no INSERT policy at all, so this
+  /// RPC is the *only* way a membership row can be created, which is what
+  /// makes possessing the code (not just a circle's id) required to join.
+  static Future<Map<String, dynamic>> joinCircleByCode(
+      String token, String code) async {
+    final res = await Net.request(
+      'POST',
+      '$baseUrl/rest/v1/rpc/join_circle_by_code',
+      headers: _headers(token),
+      body: {'p_code': code},
+    );
+    if (!res.ok) throw _pgException(res.body);
+    return jsonDecode(res.body) as Map<String, dynamic>;
+  }
+
+  /// Leaving (member removes self) and removing a member (owner removes
+  /// someone) are the same call — RLS already allows either caller, see
+  /// the migration's "member can leave, owner can remove a member" policy.
+  static Future<void> removeCircleMember(
+      String token, String circleId, String userId) async {
+    final res = await Net.request(
+      'DELETE',
+      '$baseUrl/rest/v1/circle_members?circle_id=eq.$circleId&user_id=eq.$userId',
       headers: _headers(token),
     );
     if (!res.ok) throw _pgException(res.body);
@@ -305,8 +428,8 @@ class Backend {
   static NetException _authException(String body) {
     try {
       final data = jsonDecode(body) as Map<String, dynamic>;
-      final msg =
-          (data['msg'] ?? data['error_description'] ?? data['error'])?.toString();
+      final msg = (data['msg'] ?? data['error_description'] ?? data['error'])
+          ?.toString();
       if (msg != null && msg.isNotEmpty) {
         return NetException(msg, technicalDetail: body);
       }
@@ -371,8 +494,7 @@ class AuthSession {
       refreshToken: json['refresh_token'] as String,
       userId: user['id'] as String,
       email: user['email'] as String? ?? '',
-      metadata:
-          (user['user_metadata'] as Map<String, dynamic>?) ?? const {},
+      metadata: (user['user_metadata'] as Map<String, dynamic>?) ?? const {},
     );
   }
 }

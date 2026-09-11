@@ -7,6 +7,7 @@ import '../learn/memorized_page.dart';
 import '../progress/achievements_page.dart';
 import '../quran/bookmarks_page.dart';
 import '../settings/settings_page.dart';
+import 'circles_page.dart';
 import 'pro_page.dart';
 
 class ProfilePage extends StatelessWidget {
@@ -48,7 +49,8 @@ class ProfilePage extends StatelessWidget {
                   children: [
                     Positioned.fill(
                       child: DecoratedBox(
-                          decoration: BoxDecoration(gradient: AppGradients.hero)),
+                          decoration:
+                              BoxDecoration(gradient: AppGradients.hero)),
                     ),
                     const Positioned.fill(child: StarField()),
                     Padding(
@@ -106,10 +108,9 @@ class ProfilePage extends StatelessWidget {
             child: _section(context, 'آمار شما', [
               _row(context, 'سطح', 'سطح ${appState.level}'),
               _row(context, 'مجموع امتیاز', '${appState.totalXp}'),
-              _row(context, 'روند فعلی',
-                  '${appState.currentStreak} روز'),
-              _row(context, 'طولانی‌ترین روند',
-                  '${appState.longestStreak} روز'),
+              _row(context, 'روند فعلی', '${appState.currentStreak} روز'),
+              _row(
+                  context, 'طولانی‌ترین روند', '${appState.longestStreak} روز'),
               _row(context, 'آیه حفظ شده', '${appState.ayatHeld}'),
             ]),
           ),
@@ -117,15 +118,30 @@ class ProfilePage extends StatelessWidget {
           Reveal(
             index: 2,
             child: _section(context, 'کتابخانه شما', [
-              _navRow(context, Icons.auto_stories_rounded, 'آیات حفظ شده',
+              _navRow(
+                  context,
+                  Icons.auto_stories_rounded,
+                  'آیات حفظ شده',
                   () => Navigator.of(context).push(MaterialPageRoute<void>(
                       builder: (_) => const MemorizedPage()))),
-              _navRow(context, Icons.star_rounded, 'نشان‌شده‌ها',
+              _navRow(
+                  context,
+                  Icons.star_rounded,
+                  'نشان‌شده‌ها',
                   () => Navigator.of(context).push(MaterialPageRoute<void>(
                       builder: (_) => const BookmarksPage()))),
-              _navRow(context, Icons.workspace_premium_rounded, 'دستاوردها',
+              _navRow(
+                  context,
+                  Icons.workspace_premium_rounded,
+                  'دستاوردها',
                   () => Navigator.of(context).push(MaterialPageRoute<void>(
-                      builder: (_) => const AchievementsPage())),
+                      builder: (_) => const AchievementsPage()))),
+              _navRow(
+                  context,
+                  Icons.groups_rounded,
+                  'حلقهٔ خانواده و معلم',
+                  () => Navigator.of(context).push(MaterialPageRoute<void>(
+                      builder: (_) => const CirclesPage())),
                   last: true),
             ]),
           ),
@@ -144,19 +160,20 @@ class ProfilePage extends StatelessWidget {
                       style: Theme.of(context).textTheme.bodyLarge),
                 ),
               ),
-              _row(context, 'هدف روزانه',
-                  '${appState.dailyGoalMinutes} دقیقه'),
+              _row(context, 'هدف روزانه', '${appState.dailyGoalMinutes} دقیقه'),
               _row(context, 'تمرکز', appState.learningGoal),
-              _row(context, 'حساب کاربری',
-                  appState.hasSyncedAccount ? 'همگام‌شده با این رایانه' : 'فقط روی این دستگاه'),
+              _row(
+                  context,
+                  'حساب کاربری',
+                  appState.hasSyncedAccount
+                      ? 'همگام‌شده با این رایانه'
+                      : 'فقط روی این دستگاه'),
               Pressable(
                 onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute<void>(
-                      builder: (_) => const SettingsPage()),
+                  MaterialPageRoute<void>(builder: (_) => const SettingsPage()),
                 ),
                 child: Padding(
-                  padding:
-                      const EdgeInsets.symmetric(vertical: AppSpacing.md),
+                  padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
                   child: Row(
                     children: [
                       Expanded(
@@ -181,13 +198,12 @@ class ProfilePage extends StatelessWidget {
             child: Pressable(
               onTap: () {
                 appState.signOut();
-                Navigator.of(context).pushNamedAndRemoveUntil(
-                    '/login', (route) => false);
+                Navigator.of(context)
+                    .pushNamedAndRemoveUntil('/login', (route) => false);
               },
               child: Container(
                 width: double.infinity,
-                padding:
-                    const EdgeInsets.symmetric(vertical: AppSpacing.lg),
+                padding: const EdgeInsets.symmetric(vertical: AppSpacing.lg),
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(AppRadius.md),
@@ -293,8 +309,7 @@ class ProfilePage extends StatelessWidget {
         ),
         child: Row(
           children: [
-            const Icon(Icons.workspace_premium_rounded,
-                color: AppColors.white),
+            const Icon(Icons.workspace_premium_rounded, color: AppColors.white),
             const SizedBox(width: AppSpacing.md),
             Expanded(
               child: Column(
@@ -302,8 +317,7 @@ class ProfilePage extends StatelessWidget {
                 children: [
                   const Text('ارتقا به Pro',
                       style: TextStyle(
-                          color: AppColors.white,
-                          fontWeight: FontWeight.w800)),
+                          color: AppColors.white, fontWeight: FontWeight.w800)),
                   Text('قلب نامحدود، همهٔ قاریان و بیشتر',
                       style: Theme.of(context)
                           .textTheme
@@ -319,8 +333,9 @@ class ProfilePage extends StatelessWidget {
     );
   }
 
-  Widget _navRow(BuildContext context, IconData icon, String label,
-      VoidCallback onTap, {bool last = false}) {
+  Widget _navRow(
+      BuildContext context, IconData icon, String label, VoidCallback onTap,
+      {bool last = false}) {
     return Pressable(
       onTap: onTap,
       child: Padding(
@@ -345,8 +360,7 @@ class ProfilePage extends StatelessWidget {
       child: Row(
         children: [
           Expanded(
-            child:
-                Text(label, style: Theme.of(context).textTheme.bodyLarge),
+            child: Text(label, style: Theme.of(context).textTheme.bodyLarge),
           ),
           Text(value, style: Theme.of(context).textTheme.labelLarge),
         ],
