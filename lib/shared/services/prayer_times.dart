@@ -80,3 +80,30 @@ class NoPrayerTimesService implements PrayerTimesService {
 /// Real geolocation + Aladhan API lookup on web, the stub everywhere else.
 /// Set once in main().
 PrayerTimesService prayerTimesService = const NoPrayerTimesService();
+
+/// Which of today's five prayers is still ahead of [now], and how many
+/// minutes until it — always positive. If every prayer today has already
+/// passed, wraps to tomorrow's Fajr (minutes counted through midnight),
+/// rather than returning null: there's always a "next prayer" in the
+/// real world, even at 11pm. Pure function of its inputs (no
+/// `DateTime.now()` inside), so it's directly unit-testable.
+({Prayer prayer, int minutesUntil}) nextPrayerFrom(
+    PrayerTimes times, TimeOfDay now) {
+  int minutesOfDay(TimeOfDay t) => t.hour * 60 + t.minute;
+  final nowMin = minutesOfDay(now);
+  const order = [
+    Prayer.fajr,
+    Prayer.dhuhr,
+    Prayer.asr,
+    Prayer.maghrib,
+    Prayer.isha,
+  ];
+  for (final p in order) {
+    final pm = minutesOfDay(times[p]);
+    if (pm > nowMin) {
+      return (prayer: p, minutesUntil: pm - nowMin);
+    }
+  }
+  final fajrMin = minutesOfDay(times.fajr);
+  return (prayer: Prayer.fajr, minutesUntil: (24 * 60 - nowMin) + fajrMin);
+}

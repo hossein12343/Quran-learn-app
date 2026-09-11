@@ -7,6 +7,7 @@ import '../../core/widgets/mascot.dart';
 import '../../core/widgets/pattern_overlay.dart';
 import '../../shared/data/quran_seed.dart';
 import '../../shared/services/app_state.dart';
+import '../prayer_times/prayer_times_page.dart';
 import '../profile/pro_page.dart';
 import '../qibla/qibla_page.dart';
 import '../quiz/quiz_page.dart';
@@ -134,6 +135,8 @@ class _HomePageState extends State<HomePage> {
                   ),
                   Row(
                     children: [
+                      _prayerTimesButton(context),
+                      const SizedBox(width: AppSpacing.sm),
                       _qiblaButton(context),
                       const SizedBox(width: AppSpacing.sm),
                       Mascot(
@@ -729,6 +732,25 @@ class _HomePageState extends State<HomePage> {
           color: Theme.of(context).colorScheme.surfaceContainerHighest,
         ),
         child: Icon(Icons.explore_rounded, size: 20, color: context.mutedColor),
+      ),
+    );
+  }
+
+  Widget _prayerTimesButton(BuildContext context) {
+    return Pressable(
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute<void>(builder: (_) => const PrayerTimesPage()),
+      ),
+      child: Container(
+        width: 36,
+        height: 36,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        ),
+        child: Icon(Icons.access_time_filled_rounded,
+            size: 20, color: context.mutedColor),
       ),
     );
   }
