@@ -164,6 +164,18 @@ class AboutPage extends StatelessWidget {
               index: 12,
               child: _card(
                 context,
+                icon: Icons.volunteer_activism_rounded,
+                title: 'دعاها و اذکار',
+                body: 'مجموعهٔ کامل «حصن المسلم» (Fortress of the Muslim) '
+                    'از hisnmuslim.com — ۱۳۲ فصل، فقط به انگلیسی، چون این '
+                    'منبع نسخهٔ فارسی ندارد.',
+              ),
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            Reveal(
+              index: 13,
+              child: _card(
+                context,
                 icon: Icons.block_flipped,
                 title: 'تعهد ما دربارهٔ تبلیغات',
                 body: 'حتی اگر در آینده تبلیغاتی به نسخهٔ رایگان اضافه '

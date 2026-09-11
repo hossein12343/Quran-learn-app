@@ -16,6 +16,7 @@ import '../../shared/services/share.dart';
 import '../../shared/services/store/local_store.dart';
 import '../../shared/services/tafsir.dart';
 import 'bookmarks_page.dart';
+import 'duas_page.dart';
 import 'khatm_page.dart';
 import 'mushaf_page_view.dart';
 import 'verse_search_page.dart';
@@ -120,6 +121,13 @@ class _QuranPageState extends State<QuranPage> {
             tooltip: 'نشان‌شده‌ها',
             onPressed: () => Navigator.of(context).push(
               MaterialPageRoute<void>(builder: (_) => const BookmarksPage()),
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.volunteer_activism_rounded),
+            tooltip: 'دعاها و اذکار',
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(builder: (_) => const DuasPage()),
             ),
           ),
         ],
