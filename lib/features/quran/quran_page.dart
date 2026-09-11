@@ -12,6 +12,7 @@ import '../../shared/services/offline_audio.dart';
 import '../../shared/services/settings.dart';
 import '../../shared/services/share.dart';
 import '../../shared/services/store/local_store.dart';
+import '../../shared/services/tafsir.dart';
 import 'bookmarks_page.dart';
 import 'khatm_page.dart';
 import 'mushaf_page_view.dart';
@@ -747,6 +748,20 @@ class _SurahReaderPageState extends State<SurahReaderPage> {
                   ),
                 ),
               ],
+              const SizedBox(width: AppSpacing.md),
+              Pressable(
+                onTap: () => _toggleTafsir(a),
+                child: Padding(
+                  padding: const EdgeInsets.all(4),
+                  child: Icon(
+                    Icons.auto_stories_rounded,
+                    size: 22,
+                    color: _tafsirOpenAyah == a.number
+                        ? AppColors.primary
+                        : context.mutedColor,
+                  ),
+                ),
+              ),
             ],
           ),
           const SizedBox(height: AppSpacing.md),
@@ -762,6 +777,83 @@ class _SurahReaderPageState extends State<SurahReaderPage> {
                 a.translation,
             style: Theme.of(context).textTheme.bodyMedium,
           ),
+          if (_tafsirOpenAyah == a.number) ...[
+            const SizedBox(height: AppSpacing.md),
+            _tafsirPanel(context),
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// Which ayah's tafsir panel is expanded, if any — one at a time,
+  /// same reasoning as [_tappedWordAyah]. `_tafsirText` is cleared
+  /// whenever a *different* ayah is opened so a stale answer never
+  /// flashes under the wrong ayah while the real fetch is in flight.
+  int? _tafsirOpenAyah;
+  bool _tafsirLoading = false;
+  String? _tafsirText;
+
+  Future<void> _toggleTafsir(Ayah a) async {
+    if (_tafsirOpenAyah == a.number) {
+      setState(() => _tafsirOpenAyah = null);
+      return;
+    }
+    setState(() {
+      _tafsirOpenAyah = a.number;
+      _tafsirText = null;
+      _tafsirLoading = true;
+    });
+    final text = await tafsirService.fetch(widget.surah.number, a.number);
+    // The user may have closed this panel or opened a different ayah's
+    // while the fetch was in flight — don't let a slow, now-irrelevant
+    // response overwrite whatever's actually showing.
+    if (!mounted || _tafsirOpenAyah != a.number) return;
+    setState(() {
+      _tafsirLoading = false;
+      _tafsirText = text;
+    });
+  }
+
+  Widget _tafsirPanel(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.md),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(AppRadius.md),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'تفسیر ابن‌کثیر (به انگلیسی)',
+            style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                  color: AppColors.primary,
+                  fontWeight: FontWeight.w700,
+                ),
+          ),
+          const SizedBox(height: AppSpacing.xs),
+          if (_tafsirLoading)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: AppSpacing.sm),
+              child: SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            )
+          else if (_tafsirText == null)
+            Text('در حال حاضر تفسیری برای این آیه در دسترس نیست.',
+                style: Theme.of(context).textTheme.bodySmall)
+          else
+            Directionality(
+              textDirection: TextDirection.ltr,
+              child: Text(
+                _tafsirText!,
+                textAlign: TextAlign.left,
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ),
         ],
       ),
     );

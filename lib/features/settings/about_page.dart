@@ -115,6 +115,18 @@ class AboutPage extends StatelessWidget {
               index: 8,
               child: _card(
                 context,
+                icon: Icons.auto_stories_rounded,
+                title: 'تفسیر',
+                body: 'با لمس آیکون کتاب زیر هر آیه، تفسیر ابن‌کثیر '
+                    '(نسخهٔ خلاصه) نمایش داده می‌شود — فقط به انگلیسی، '
+                    'چون Quran.com هیچ تفسیر فارسی‌ای در دسترس ندارد.',
+              ),
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            Reveal(
+              index: 9,
+              child: _card(
+                context,
                 icon: Icons.block_flipped,
                 title: 'تعهد ما دربارهٔ تبلیغات',
                 body: 'حتی اگر در آینده تبلیغاتی به نسخهٔ رایگان اضافه '
