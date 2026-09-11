@@ -58,6 +58,13 @@ abstract class PrayerTimesService {
   /// whatever reminder time was last resolved (or the fixed-time default)
   /// rather than block the reminder entirely on this.
   Future<PrayerTimes?> fetchToday();
+
+  /// Just the (latitude, longitude) this service would resolve prayer
+  /// times for — cached under the same key `fetchToday` uses, so any
+  /// caller (the Qibla page, in particular) shares one location lookup
+  /// and one permission prompt with the reminder feature rather than
+  /// asking twice. Null under the same conditions as [fetchToday].
+  Future<(double, double)?> resolveLocation();
 }
 
 class NoPrayerTimesService implements PrayerTimesService {
@@ -65,6 +72,9 @@ class NoPrayerTimesService implements PrayerTimesService {
 
   @override
   Future<PrayerTimes?> fetchToday() async => null;
+
+  @override
+  Future<(double, double)?> resolveLocation() async => null;
 }
 
 /// Real geolocation + Aladhan API lookup on web, the stub everywhere else.

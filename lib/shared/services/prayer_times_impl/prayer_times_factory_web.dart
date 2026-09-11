@@ -25,7 +25,7 @@ class WebPrayerTimesService implements PrayerTimesService {
   @override
   Future<PrayerTimes?> fetchToday() async {
     try {
-      final loc = await _resolveLocation();
+      final loc = await resolveLocation();
       if (loc == null) return null;
       final now = DateTime.now();
       final date =
@@ -35,14 +35,15 @@ class WebPrayerTimesService implements PrayerTimesService {
       final res = await Net.request('GET', url);
       if (!res.ok) return null;
       final body = jsonDecode(res.body) as Map<String, dynamic>;
-      final timings =
-          (body['data'] as Map<String, dynamic>)['timings'] as Map<String, dynamic>;
+      final timings = (body['data'] as Map<String, dynamic>)['timings']
+          as Map<String, dynamic>;
       TimeOfDay parse(String key) {
         // Aladhan returns "HH:mm" or "HH:mm (TZ)" depending on tuning
         // params — this app passes none, but strip defensively either way.
         final raw = (timings[key] as String).split(' ').first;
         final parts = raw.split(':');
-        return TimeOfDay(hour: int.parse(parts[0]), minute: int.parse(parts[1]));
+        return TimeOfDay(
+            hour: int.parse(parts[0]), minute: int.parse(parts[1]));
       }
 
       return PrayerTimes(
@@ -64,7 +65,8 @@ class WebPrayerTimesService implements PrayerTimesService {
   /// (latitude, longitude) — from a cached previous lookup if there is one
   /// (avoids re-prompting for location permission every day), else a fresh
   /// `getCurrentPosition()` call, cached on success.
-  Future<(double, double)?> _resolveLocation() async {
+  @override
+  Future<(double, double)?> resolveLocation() async {
     final cachedLat = LocalStore.get(_latKey);
     final cachedLon = LocalStore.get(_lonKey);
     if (cachedLat != null && cachedLon != null) {

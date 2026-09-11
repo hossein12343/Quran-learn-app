@@ -8,6 +8,7 @@ import '../../core/widgets/pattern_overlay.dart';
 import '../../shared/data/quran_seed.dart';
 import '../../shared/services/app_state.dart';
 import '../profile/pro_page.dart';
+import '../qibla/qibla_page.dart';
 import '../quiz/quiz_page.dart';
 import '../review/review_page.dart';
 
@@ -133,6 +134,8 @@ class _HomePageState extends State<HomePage> {
                   ),
                   Row(
                     children: [
+                      _qiblaButton(context),
+                      const SizedBox(width: AppSpacing.sm),
                       Mascot(
                         mood: appState.currentStreak > 0
                             ? MascotMood.happy
@@ -356,7 +359,15 @@ class _HomePageState extends State<HomePage> {
   /// Rendered RTL so Saturday sits on the right.
   Widget _weekStrip() {
     // Persian weekday initials, Saturday first \u2014 matches AppState.thisWeek.
-    const labels = ['\u0634', '\u06cc', '\u062f', '\u0633', '\u0686', '\u067e', '\u062c'];
+    const labels = [
+      '\u0634',
+      '\u06cc',
+      '\u062f',
+      '\u0633',
+      '\u0686',
+      '\u067e',
+      '\u062c'
+    ];
     final week = appState.thisWeek;
     final surface = Theme.of(context).colorScheme.surfaceContainerHighest;
 
@@ -389,11 +400,14 @@ class _HomePageState extends State<HomePage> {
                       children: [
                         Text(
                           labels[i],
-                          style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                                color: week[i].isToday ? AppColors.primary : null,
-                                fontWeight: week[i].isToday
-                                    ? FontWeight.w800
-                                    : null,
+                          style: Theme.of(context)
+                              .textTheme
+                              .labelSmall
+                              ?.copyWith(
+                                color:
+                                    week[i].isToday ? AppColors.primary : null,
+                                fontWeight:
+                                    week[i].isToday ? FontWeight.w800 : null,
                               ),
                         ),
                         const SizedBox(height: 6),
@@ -409,8 +423,7 @@ class _HomePageState extends State<HomePage> {
                                     ? Colors.transparent
                                     : surface),
                             border: week[i].isToday
-                                ? Border.all(
-                                    color: AppColors.primary, width: 2)
+                                ? Border.all(color: AppColors.primary, width: 2)
                                 : (week[i].future
                                     ? Border.all(color: surface, width: 1.5)
                                     : null),
@@ -452,7 +465,8 @@ class _HomePageState extends State<HomePage> {
               const Icon(Icons.flag_rounded, color: AppColors.gold, size: 20),
               const SizedBox(width: AppSpacing.sm),
               Expanded(
-                child: Text('\u0645\u0623\u0645\u0648\u0631\u06cc\u062a\u200c\u0647\u0627\u06cc \u0627\u0645\u0631\u0648\u0632',
+                child: Text(
+                    '\u0645\u0623\u0645\u0648\u0631\u06cc\u062a\u200c\u0647\u0627\u06cc \u0627\u0645\u0631\u0648\u0632',
                     style: Theme.of(context).textTheme.titleLarge),
               ),
               Text(
@@ -560,13 +574,15 @@ class _HomePageState extends State<HomePage> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('\u06cc\u0627\u062f\u06af\u06cc\u0631\u06cc \u0642\u0631\u0622\u0646 Pro',
+                          Text(
+                              '\u06cc\u0627\u062f\u06af\u06cc\u0631\u06cc \u0642\u0631\u0622\u0646 Pro',
                               style: TextStyle(
                                   color: AppColors.white,
                                   fontSize: 17,
                                   fontWeight: FontWeight.w800)),
                           SizedBox(height: 2),
-                          Text('\u0642\u0644\u0628 \u0646\u0627\u0645\u062d\u062f\u0648\u062f\u060c \u0645\u062d\u0627\u0641\u0638 \u0631\u0648\u0646\u062f\u060c \u0647\u0645\u0647\u0654 \u0642\u0627\u0631\u06cc\u0627\u0646',
+                          Text(
+                              '\u0642\u0644\u0628 \u0646\u0627\u0645\u062d\u062f\u0648\u062f\u060c \u0645\u062d\u0627\u0641\u0638 \u0631\u0648\u0646\u062f\u060c \u0647\u0645\u0647\u0654 \u0642\u0627\u0631\u06cc\u0627\u0646',
                               style: TextStyle(
                                   color: Colors.white70, fontSize: 12.5)),
                         ],
@@ -635,9 +651,7 @@ class _HomePageState extends State<HomePage> {
           ),
           const SizedBox(height: AppSpacing.lg),
           DuoButton(
-              label: 'شروع جلسه',
-              onTap: _openNext,
-              color: AppColors.primary),
+              label: 'شروع جلسه', onTap: _openNext, color: AppColors.primary),
         ],
       ),
     );
@@ -679,7 +693,8 @@ class _HomePageState extends State<HomePage> {
               builder: (context, v, _) => LinearProgressIndicator(
                 value: v,
                 minHeight: 8,
-                backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                backgroundColor:
+                    Theme.of(context).colorScheme.surfaceContainerHighest,
                 valueColor:
                     const AlwaysStoppedAnimation<Color>(AppColors.secondary),
               ),
@@ -692,6 +707,28 @@ class _HomePageState extends State<HomePage> {
             style: Theme.of(context).textTheme.bodySmall,
           ),
         ],
+      ),
+    );
+  }
+
+  /// A quick-access entry point for a daily-utility feature that doesn't
+  /// belong inside the memorization-focused cards below it — same reason
+  /// it sits in the header, not a full card of its own competing with
+  /// "continue your session" for attention.
+  Widget _qiblaButton(BuildContext context) {
+    return Pressable(
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute<void>(builder: (_) => const QiblaPage()),
+      ),
+      child: Container(
+        width: 36,
+        height: 36,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        ),
+        child: Icon(Icons.explore_rounded, size: 20, color: context.mutedColor),
       ),
     );
   }
@@ -763,4 +800,3 @@ class _StreakMilestoneDialog extends StatelessWidget {
     );
   }
 }
-

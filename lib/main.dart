@@ -13,6 +13,8 @@ import 'shared/services/app_log.dart';
 import 'shared/services/app_state.dart';
 import 'shared/services/audio.dart';
 import 'shared/services/audio_impl/audio_factory.dart';
+import 'shared/services/compass.dart';
+import 'shared/services/compass_impl/compass_factory.dart';
 import 'shared/services/oauth/web_nav.dart';
 import 'shared/services/offline_audio.dart';
 import 'shared/services/offline_audio_impl/offline_audio_factory.dart';
@@ -152,6 +154,7 @@ void main() {
   reminders = createReminderService();
   prayerTimesService = createPrayerTimesService();
   reciteGrader = createReciteGrader();
+  deviceCompass = createDeviceCompass();
   if (kIsWeb) {
     _installDailyReminderWatch();
     appState.addListener(_maybeResubscribePush);
