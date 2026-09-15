@@ -566,7 +566,7 @@ class _SurahReaderPageState extends State<SurahReaderPage> {
           case 'translation2':
             _toggleTranslation2();
           case 'tajweed':
-            settings.setTajweedEnabled(!settings.tajweedEnabled);
+            _toggleTajweed();
         }
       },
       itemBuilder: (context) => [
@@ -585,14 +585,27 @@ class _SurahReaderPageState extends State<SurahReaderPage> {
           checked: settings.useTranslation2,
           child: const Text('ترجمهٔ دوم'),
         ),
-        if (tajweedLoaded)
-          CheckedPopupMenuItem<String>(
-            value: 'tajweed',
-            checked: settings.tajweedEnabled,
-            child: const Text('رنگ‌آمیزی تجوید'),
-          ),
+        CheckedPopupMenuItem<String>(
+          value: 'tajweed',
+          checked: settings.tajweedEnabled,
+          child: const Text('رنگ‌آمیزی تجوید'),
+        ),
       ],
     );
+  }
+
+  /// Lazily loads tajweed data on first use, same pattern as the other
+  /// three toggles above — this used to load unconditionally at splash
+  /// (see main.dart's history), costing every single boot a ~2MB fetch
+  /// and background-isolate parse for a reading aid most sessions never
+  /// turn on. No loading-state flag here either, same reasoning as
+  /// [_toggleWordByWord]: the popup menu closes itself immediately.
+  Future<void> _toggleTajweed() async {
+    if (!settings.tajweedEnabled && !tajweedLoaded) {
+      await loadTajweedData();
+      if (!mounted) return;
+    }
+    settings.setTajweedEnabled(!settings.tajweedEnabled);
   }
 
   /// Plain ayah text, unless the tajweed toggle is on *and* rule data
