@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import '../../core/theme/app_theme.dart';
@@ -218,20 +219,44 @@ class _CompassPainter extends CustomPainter {
     final center = size.center(Offset.zero);
     final radius = size.width / 2 - 4;
 
+    // A soft radial glow behind the dial — a flat stroked circle on a
+    // plain background was the single biggest reason this read as
+    // "plain": nothing gave the disc any sense of depth or material.
     canvas.drawCircle(
       center,
       radius,
       Paint()
+        ..shader = ui.Gradient.radial(center, radius, [
+          AppColors.gold.withValues(alpha: 0.16),
+          AppColors.gold.withValues(alpha: 0.0),
+        ]),
+    );
+
+    // Two rings instead of one — an outer gold-tinted edge and an
+    // inset inner ring — reads as a layered instrument face rather
+    // than a single bare outline.
+    canvas.drawCircle(
+      center,
+      radius,
+      Paint()
+        ..color = AppColors.gold.withValues(alpha: 0.55)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.5,
+    );
+    canvas.drawCircle(
+      center,
+      radius - 9,
+      Paint()
         ..color = borderColor
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 2,
+        ..strokeWidth = 1,
     );
 
     for (var deg = 0; deg < 360; deg += 30) {
       final isCardinal = deg % 90 == 0;
-      final outer = _point(center, radius, deg.toDouble());
+      final outer = _point(center, radius - 4, deg.toDouble());
       final inner =
-          _point(center, radius - (isCardinal ? 12 : 6), deg.toDouble());
+          _point(center, radius - (isCardinal ? 20 : 11), deg.toDouble());
       canvas.drawLine(
         inner,
         outer,
@@ -239,7 +264,8 @@ class _CompassPainter extends CustomPainter {
           ..color = deg == 0
               ? AppColors.primary
               : (isCardinal ? mutedColor : borderColor)
-          ..strokeWidth = isCardinal ? 2 : 1,
+          ..strokeWidth = isCardinal ? 3 : 1.4
+          ..strokeCap = StrokeCap.round,
       );
     }
 
@@ -253,37 +279,82 @@ class _CompassPainter extends CustomPainter {
         ),
         textDirection: TextDirection.ltr,
       )..layout();
-      final pos = _point(center, radius - 28, entry.key.toDouble());
+      final pos = _point(center, radius - 36, entry.key.toDouble());
       tp.paint(canvas, pos - Offset(tp.width / 2, tp.height / 2));
     }
 
-    // The Qibla needle: a line from center to the bearing angle, capped
-    // with a small triangular arrowhead.
-    final tip = _point(center, radius - 22, bearing);
-    canvas.drawLine(
-      center,
-      tip,
-      Paint()
-        ..color = AppColors.gold
-        ..strokeWidth = 4
-        ..strokeCap = StrokeCap.round,
-    );
+    // The needle itself: a classic two-toned compass needle — a
+    // tapered gold lens pointing at the Kaaba, balanced by a shorter,
+    // muted tail on the opposite side — rather than a plain line with
+    // a triangular arrowhead, which read as a generic hiking-compass
+    // needle rather than something built for this one purpose.
+    final tip = _point(center, radius - 30, bearing);
+    final tail = _point(center, radius * 0.4, bearing + 180);
     final dir = tip - center;
     final len = dir.distance;
     if (len > 0) {
       final unit = dir / len;
       final perp = Offset(-unit.dy, unit.dx);
-      const headLen = 14.0, headWidth = 9.0;
-      final base = tip - unit * headLen;
-      final path = Path()
-        ..moveTo(tip.dx, tip.dy)
-        ..lineTo((base + perp * headWidth).dx, (base + perp * headWidth).dy)
-        ..lineTo((base - perp * headWidth).dx, (base - perp * headWidth).dy)
-        ..close();
-      canvas.drawPath(path, Paint()..color = AppColors.gold);
+
+      const headWidth = 7.0;
+      canvas.drawPath(
+        Path()
+          ..moveTo(center.dx, center.dy)
+          ..lineTo(
+              (center + perp * headWidth).dx, (center + perp * headWidth).dy)
+          ..lineTo(tip.dx, tip.dy)
+          ..lineTo(
+              (center - perp * headWidth).dx, (center - perp * headWidth).dy)
+          ..close(),
+        Paint()..color = AppColors.gold,
+      );
+
+      const tailWidth = 5.0;
+      canvas.drawPath(
+        Path()
+          ..moveTo(center.dx, center.dy)
+          ..lineTo(
+              (center + perp * tailWidth).dx, (center + perp * tailWidth).dy)
+          ..lineTo(tail.dx, tail.dy)
+          ..lineTo(
+              (center - perp * tailWidth).dx, (center - perp * tailWidth).dy)
+          ..close(),
+        Paint()..color = mutedColor.withValues(alpha: 0.55),
+      );
+
+      _drawKaaba(canvas, tip, unit);
     }
 
-    canvas.drawCircle(center, 5, Paint()..color = AppColors.primary);
+    // A two-tone pivot instead of one flat dot, echoing the needle's
+    // own gold/primary pairing.
+    canvas.drawCircle(center, 7, Paint()..color = AppColors.gold);
+    canvas.drawCircle(center, 4.5, Paint()..color = AppColors.primary);
+    canvas.drawCircle(
+        center, 1.6, Paint()..color = Colors.white.withValues(alpha: 0.85));
+  }
+
+  /// A small stylised Kaaba — a plain dark cube with a gold band —
+  /// marking the needle's tip. This is a Qibla compass, not a hiking
+  /// one; a generic arrowhead never said what the needle actually
+  /// points at.
+  void _drawKaaba(Canvas canvas, Offset tip, Offset unit) {
+    const side = 13.0;
+    final rect = Rect.fromCenter(
+        center: tip - unit * (side * 0.2), width: side, height: side);
+    final rrect = RRect.fromRectAndRadius(rect, const Radius.circular(2));
+    canvas.drawRRect(rrect, Paint()..color = const Color(0xFF15130F));
+    canvas.drawRect(
+      Rect.fromLTWH(rect.left, rect.top + rect.height * 0.34, rect.width,
+          rect.height * 0.15),
+      Paint()..color = AppColors.gold,
+    );
+    canvas.drawRRect(
+      rrect,
+      Paint()
+        ..color = Colors.black.withValues(alpha: 0.25)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1,
+    );
   }
 
   @override
