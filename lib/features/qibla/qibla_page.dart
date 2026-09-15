@@ -100,42 +100,61 @@ class _QiblaPageState extends State<QiblaPage> {
       valueListenable: deviceCompass.heading,
       builder: (context, heading, _) => ValueListenableBuilder<bool>(
         valueListenable: deviceCompass.timedOut,
-        builder: (context, timedOut, _) => SingleChildScrollView(
-          padding: const EdgeInsets.all(AppSpacing.xl),
-          child: Column(
-            children: [
-              const SizedBox(height: AppSpacing.lg),
-              _dial(context, bearing, heading),
-              const SizedBox(height: AppSpacing.xl),
-              Text('${bearing.round()}° از شمال',
-                  style: Theme.of(context).textTheme.headlineSmall),
-              const SizedBox(height: AppSpacing.xs),
-              Text('${distance.round()} کیلومتر تا کعبه',
-                  style: Theme.of(context).textTheme.bodyMedium),
-              const SizedBox(height: AppSpacing.xl),
-              if (heading != null)
-                Text(
-                  'قطب‌نما فعال است — بچرخ تا فلش طلایی درست رو به بالا بایستد.',
-                  textAlign: TextAlign.center,
-                  style: Theme.of(context)
-                      .textTheme
-                      .bodySmall
-                      ?.copyWith(color: AppColors.primary),
-                )
-              else if (timedOut || !deviceCompass.available)
-                Text(
-                  _unsupportedMessage,
-                  textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.bodySmall,
-                )
-              else
-                DuoButton(
-                  label: _requestingCompass
-                      ? 'در حال فعال‌سازی…'
-                      : 'فعال‌سازی قطب‌نمای زنده',
-                  onTap: _requestingCompass ? null : _activateCompass,
+        // `LayoutBuilder` here (outside the scroll view) reads the
+        // Scaffold body's real available height, so the `ConstrainedBox`
+        // below can force the scrollable content to be at least that
+        // tall — without it, the Column just started at the top and
+        // left the rest of a tall phone screen empty below it, which
+        // read as "not even centred" because it genuinely wasn't.
+        // `Center` then does the actual centring on any screen tall
+        // enough for the content to fit; a short/landscape screen still
+        // scrolls normally once content exceeds that minimum height.
+        builder: (context, timedOut, _) => LayoutBuilder(
+          builder: (context, constraints) => SingleChildScrollView(
+            padding: const EdgeInsets.all(AppSpacing.xl),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                minHeight: constraints.maxHeight - AppSpacing.xl * 2,
+              ),
+              child: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const SizedBox(height: AppSpacing.lg),
+                    _dial(context, bearing, heading),
+                    const SizedBox(height: AppSpacing.xl),
+                    Text('${bearing.round()}° از شمال',
+                        style: Theme.of(context).textTheme.headlineSmall),
+                    const SizedBox(height: AppSpacing.xs),
+                    Text('${distance.round()} کیلومتر تا کعبه',
+                        style: Theme.of(context).textTheme.bodyMedium),
+                    const SizedBox(height: AppSpacing.xl),
+                    if (heading != null)
+                      Text(
+                        'قطب‌نما فعال است — بچرخ تا فلش طلایی درست رو به بالا بایستد.',
+                        textAlign: TextAlign.center,
+                        style: Theme.of(context)
+                            .textTheme
+                            .bodySmall
+                            ?.copyWith(color: AppColors.primary),
+                      )
+                    else if (timedOut || !deviceCompass.available)
+                      Text(
+                        _unsupportedMessage,
+                        textAlign: TextAlign.center,
+                        style: Theme.of(context).textTheme.bodySmall,
+                      )
+                    else
+                      DuoButton(
+                        label: _requestingCompass
+                            ? 'در حال فعال‌سازی…'
+                            : 'فعال‌سازی قطب‌نمای زنده',
+                        onTap: _requestingCompass ? null : _activateCompass,
+                      ),
+                  ],
                 ),
-            ],
+              ),
+            ),
           ),
         ),
       ),
