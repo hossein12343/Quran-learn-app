@@ -22,6 +22,7 @@ DeviceCompass makeCompass() => WebDeviceCompass();
 /// and the Qibla page falls back to its static bearing display.
 class WebDeviceCompass implements DeviceCompass {
   final ValueNotifier<double?> _heading = ValueNotifier<double?>(null);
+  final ValueNotifier<bool> _timedOut = ValueNotifier<bool>(false);
   bool _installed = false;
   bool _started = false;
 
@@ -62,10 +63,19 @@ class WebDeviceCompass implements DeviceCompass {
   void _startListening() {
     if (_started) return;
     _started = true;
+    // `available` only proves the browser *API* exists — real hardware
+    // is a separate question, and there's no synchronous way to ask a
+    // browser "does the device orientation event you support actually
+    // ever fire." A few seconds with no reading at all is the practical
+    // signal that it never will.
+    Timer(const Duration(seconds: 4), () {
+      if (_heading.value == null) _timedOut.value = true;
+    });
     try {
       js.context.callMethod('__qlCompassStart', [
         js.JsFunction.withThis((Object? _, num heading) {
           _heading.value = heading.toDouble();
+          _timedOut.value = false; // a real reading did arrive after all
         }),
       ]);
     } on Object {
@@ -76,6 +86,9 @@ class WebDeviceCompass implements DeviceCompass {
 
   @override
   ValueListenable<double?> get heading => _heading;
+
+  @override
+  ValueListenable<bool> get timedOut => _timedOut;
 }
 
 const String _engineJs = r'''
@@ -83,7 +96,17 @@ const String _engineJs = r'''
   if (window.__qlCompassAvailable) return;
 
   window.__qlCompassAvailable = function () {
-    return typeof DeviceOrientationEvent !== 'undefined';
+    // `DeviceOrientationEvent` existing in the JS environment does NOT
+    // mean a real orientation sensor sits behind it — most desktop
+    // browsers (Chrome, Firefox) define the constructor with no
+    // hardware at all, so events simply never fire. maxTouchPoints > 0
+    // is a cheap, synchronous "this is a touch-capable device" signal
+    // that rules out the common desktop/laptop case immediately,
+    // without needing to wait and see if anything ever arrives (see
+    // WebDeviceCompass's timedOut for the remaining, rarer case of a
+    // touch device that still has no working sensor).
+    return typeof DeviceOrientationEvent !== 'undefined' &&
+      navigator.maxTouchPoints > 0;
   };
 
   window.__qlCompassRequestPermission = function (onDone) {

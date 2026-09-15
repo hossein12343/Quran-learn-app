@@ -24,10 +24,22 @@ abstract class DeviceCompass {
   /// forever, if the sensor never reports one — some laptops/desktops
   /// expose the event with no usable data).
   ValueListenable<double?> get heading;
+
+  /// True once a reasonable interval has passed after [requestPermission]
+  /// succeeded and [heading] still never received a single real reading —
+  /// [available] can only detect that the *browser API* exists, not that
+  /// real hardware sits behind it (many desktop browsers define
+  /// `DeviceOrientationEvent` with no sensor at all), so this is the
+  /// fallback signal for "activation looked fine but nothing is actually
+  /// coming through." The Qibla page uses it to stop showing an
+  /// "activating…" button that will just sit there forever and switch to
+  /// the plain "not supported on this device" message instead.
+  ValueListenable<bool> get timedOut;
 }
 
 class UnavailableCompass implements DeviceCompass {
   final ValueNotifier<double?> _heading = ValueNotifier<double?>(null);
+  final ValueNotifier<bool> _timedOut = ValueNotifier<bool>(false);
 
   @override
   bool get available => false;
@@ -37,6 +49,9 @@ class UnavailableCompass implements DeviceCompass {
 
   @override
   ValueListenable<double?> get heading => _heading;
+
+  @override
+  ValueListenable<bool> get timedOut => _timedOut;
 }
 
 DeviceCompass deviceCompass = UnavailableCompass();

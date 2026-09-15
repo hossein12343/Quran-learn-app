@@ -89,49 +89,54 @@ class _QiblaPageState extends State<QiblaPage> {
     );
   }
 
+  static const _unsupportedMessage =
+      'قطب‌نمای زنده روی این دستگاه در دسترس نیست — با قطب‌نمای '
+      'گوشی یا نقشه، رو به همین زاویه از شمال بایست.';
+
   Widget _compassBody(BuildContext context, (double, double) loc) {
     final bearing = Qibla.bearingFrom(loc.$1, loc.$2);
     final distance = Qibla.distanceKmFrom(loc.$1, loc.$2);
     return ValueListenableBuilder<double?>(
       valueListenable: deviceCompass.heading,
-      builder: (context, heading, _) => SingleChildScrollView(
-        padding: const EdgeInsets.all(AppSpacing.xl),
-        child: Column(
-          children: [
-            const SizedBox(height: AppSpacing.lg),
-            _dial(context, bearing, heading),
-            const SizedBox(height: AppSpacing.xl),
-            Text('${bearing.round()}° از شمال',
-                style: Theme.of(context).textTheme.headlineSmall),
-            const SizedBox(height: AppSpacing.xs),
-            Text('${distance.round()} کیلومتر تا کعبه',
-                style: Theme.of(context).textTheme.bodyMedium),
-            const SizedBox(height: AppSpacing.xl),
-            if (heading != null)
-              Text(
-                'قطب‌نما فعال است — بچرخ تا فلش طلایی درست رو به بالا بایستد.',
-                textAlign: TextAlign.center,
-                style: Theme.of(context)
-                    .textTheme
-                    .bodySmall
-                    ?.copyWith(color: AppColors.primary),
-              )
-            else if (deviceCompass.available)
-              DuoButton(
-                label: _requestingCompass
-                    ? 'در حال فعال‌سازی…'
-                    : 'فعال‌سازی قطب‌نمای زنده',
-                fullWidth: false,
-                onTap: _requestingCompass ? null : _activateCompass,
-              )
-            else
-              Text(
-                'قطب‌نمای زنده روی این دستگاه در دسترس نیست — با قطب‌نمای '
-                'گوشی یا نقشه، رو به همین زاویه از شمال بایست.',
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-          ],
+      builder: (context, heading, _) => ValueListenableBuilder<bool>(
+        valueListenable: deviceCompass.timedOut,
+        builder: (context, timedOut, _) => SingleChildScrollView(
+          padding: const EdgeInsets.all(AppSpacing.xl),
+          child: Column(
+            children: [
+              const SizedBox(height: AppSpacing.lg),
+              _dial(context, bearing, heading),
+              const SizedBox(height: AppSpacing.xl),
+              Text('${bearing.round()}° از شمال',
+                  style: Theme.of(context).textTheme.headlineSmall),
+              const SizedBox(height: AppSpacing.xs),
+              Text('${distance.round()} کیلومتر تا کعبه',
+                  style: Theme.of(context).textTheme.bodyMedium),
+              const SizedBox(height: AppSpacing.xl),
+              if (heading != null)
+                Text(
+                  'قطب‌نما فعال است — بچرخ تا فلش طلایی درست رو به بالا بایستد.',
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context)
+                      .textTheme
+                      .bodySmall
+                      ?.copyWith(color: AppColors.primary),
+                )
+              else if (timedOut || !deviceCompass.available)
+                Text(
+                  _unsupportedMessage,
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.bodySmall,
+                )
+              else
+                DuoButton(
+                  label: _requestingCompass
+                      ? 'در حال فعال‌سازی…'
+                      : 'فعال‌سازی قطب‌نمای زنده',
+                  onTap: _requestingCompass ? null : _activateCompass,
+                ),
+            ],
+          ),
         ),
       ),
     );
