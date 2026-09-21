@@ -1,9 +1,6 @@
-import 'dart:ui';
-
 import 'package:flutter/material.dart';
 import '../../core/theme/app_theme.dart';
 import '../../shared/services/app_state.dart';
-import '../../shared/services/platform_info.dart';
 import '../home/home_page.dart';
 import '../learn/learn_page.dart';
 import '../practice/practice_page.dart';
@@ -55,12 +52,6 @@ class _MainShellState extends State<MainShell> {
       animation: appState,
       builder: (context, _) {
         return Scaffold(
-          // Only iPhone gets the overlapping layout the glass bar needs
-          // to actually have something to blur behind it — every other
-          // platform keeps the plain bar in its normal, non-overlapping
-          // Scaffold slot exactly as before, so nothing about their
-          // layout changes here at all.
-          extendBody: isIPhone,
           body: IndexedStack(
             index: _index,
             children: [
@@ -80,75 +71,25 @@ class _MainShellState extends State<MainShell> {
                   : const SizedBox.shrink(),
             ],
           ),
-          bottomNavigationBar:
-              isIPhone ? _glassNavBar(context) : _flatNavBar(context),
+          bottomNavigationBar: Container(
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surface,
+              border: Border(
+                top: BorderSide(color: context.borderColor, width: 2),
+              ),
+            ),
+            child: SafeArea(
+              top: false,
+              child: Row(
+                children: [
+                  for (var i = 0; i < _items.length; i++)
+                    Expanded(child: _tab(i, _items[i])),
+                ],
+              ),
+            ),
+          ),
         );
       },
-    );
-  }
-
-  Widget _flatNavBar(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        border: Border(
-          top: BorderSide(color: context.borderColor, width: 2),
-        ),
-      ),
-      child: SafeArea(
-        top: false,
-        child: Row(
-          children: [
-            for (var i = 0; i < _items.length; i++)
-              Expanded(child: _tab(i, _items[i])),
-          ],
-        ),
-      ),
-    );
-  }
-
-  /// iOS's own "Liquid Glass" material, approximated with what Flutter
-  /// actually has: a real-time blur of whatever scrolls underneath
-  /// (`BackdropFilter`, only possible because `extendBody` above lets
-  /// the page content paint behind this bar instead of stopping short
-  /// of it), a translucent tint rather than a flat fill, and a soft
-  /// top highlight standing in for glass catching light along its edge.
-  /// `ClipRect` is required — `BackdropFilter` blurs everything behind
-  /// it all the way to the nearest ancestor clip, which without one
-  /// would reach past this bar into content far above it on screen.
-  Widget _glassNavBar(BuildContext context) {
-    final tint = Theme.of(context).colorScheme.surface;
-    return ClipRect(
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
-        child: Container(
-          decoration: BoxDecoration(
-            color: tint.withValues(alpha: 0.68),
-            border: Border(
-              top: BorderSide(
-                color: Colors.white.withValues(alpha: 0.4),
-                width: 0.8,
-              ),
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.06),
-                blurRadius: 20,
-                offset: const Offset(0, -6),
-              ),
-            ],
-          ),
-          child: SafeArea(
-            top: false,
-            child: Row(
-              children: [
-                for (var i = 0; i < _items.length; i++)
-                  Expanded(child: _tab(i, _items[i])),
-              ],
-            ),
-          ),
-        ),
-      ),
     );
   }
 

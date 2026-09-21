@@ -17,8 +17,6 @@ import 'shared/services/compass.dart';
 import 'shared/services/compass_impl/compass_factory.dart';
 import 'shared/services/media_session.dart';
 import 'shared/services/media_session_impl/media_session_factory.dart';
-import 'shared/services/platform_info.dart';
-import 'shared/services/platform_info_impl/platform_info_factory.dart';
 import 'shared/services/oauth/web_nav.dart';
 import 'shared/services/share.dart';
 import 'shared/services/share_impl/share_factory.dart';
@@ -163,7 +161,6 @@ void main() {
   deviceCompass = createDeviceCompass();
   shareService = createShareService();
   mediaSession = createMediaSession();
-  isIPhone = detectIPhone();
   if (kIsWeb) {
     _installDailyReminderWatch();
     appState.addListener(_maybeResubscribePush);
