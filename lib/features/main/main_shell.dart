@@ -42,6 +42,20 @@ class _MainShellState extends State<MainShell> {
   /// live blur this whole nav bar deliberately avoids elsewhere.
   bool _navCollapsed = false;
 
+  /// True while a mouse cursor is over the floating glass dock — desktop
+  /// browsers only (touch has no hover), gives the dock a real lift/scale
+  /// response the way a cursor approaching the macOS/iPadOS Dock does,
+  /// reinforcing that it's a separate floating layer and not part of the
+  /// page underneath it.
+  bool _dockHovering = false;
+
+  /// How much clear space the floating dock needs reserved at the bottom
+  /// of the content behind it (its own height at its tallest, plus the
+  /// margin holding it off the screen edge, plus a little breathing
+  /// room) — used below so a page's last item can still scroll clear of
+  /// the dock instead of staying permanently hidden under it.
+  static const _dockReserve = 120.0;
+
   /// Every tab keeps its place in the `IndexedStack` once opened — that's
   /// what actually preserves scroll position, matching the class doc
   /// comment above — but a tab never opened this app-open is built as a
@@ -65,7 +79,17 @@ class _MainShellState extends State<MainShell> {
     return AnimatedBuilder(
       animation: appState,
       builder: (context, _) {
+        final mq = MediaQuery.of(context);
         return Scaffold(
+          // On iPhone the dock is its own floating layer over the content,
+          // not a strip the content stops short of — extendBody is
+          // Scaffold's own mechanism for letting body draw underneath
+          // bottomNavigationBar instead of reserving space for it. That's
+          // what actually lets real content scroll behind the dock and
+          // show through its glass, instead of the blur just sampling a
+          // flat edge. The flat (non-iPhone) bar keeps the old, simpler
+          // layout — it was never meant to float.
+          extendBody: isIPhone,
           body: NotificationListener<UserScrollNotification>(
             onNotification: (n) {
               if (!isIPhone) return false;
@@ -78,28 +102,40 @@ class _MainShellState extends State<MainShell> {
               }
               return false;
             },
-            child: IndexedStack(
-              index: _index,
-              children: [
-                _opened.contains(0)
-                    ? HomePage(onGoToLearn: () => _goTo(1))
-                    : const SizedBox.shrink(),
-                _opened.contains(1)
-                    ? const LearnPage()
-                    : const SizedBox.shrink(),
-                _opened.contains(2)
-                    ? const PracticePage()
-                    : const SizedBox.shrink(),
-                _opened.contains(3)
-                    ? const QuranPage()
-                    : const SizedBox.shrink(),
-                _opened.contains(4)
-                    ? const ProgressPage()
-                    : const SizedBox.shrink(),
-                _opened.contains(5)
-                    ? const ProfilePage()
-                    : const SizedBox.shrink(),
-              ],
+            child: MediaQuery(
+              // Widens the bottom safe-area inset any well-behaved page
+              // below already respects (via SafeArea/viewPadding), so
+              // scrolling can still clear the dock even though the body
+              // itself now extends full-height behind it.
+              data: isIPhone
+                  ? mq.copyWith(
+                      padding: mq.padding
+                          .copyWith(bottom: mq.padding.bottom + _dockReserve),
+                    )
+                  : mq,
+              child: IndexedStack(
+                index: _index,
+                children: [
+                  _opened.contains(0)
+                      ? HomePage(onGoToLearn: () => _goTo(1))
+                      : const SizedBox.shrink(),
+                  _opened.contains(1)
+                      ? const LearnPage()
+                      : const SizedBox.shrink(),
+                  _opened.contains(2)
+                      ? const PracticePage()
+                      : const SizedBox.shrink(),
+                  _opened.contains(3)
+                      ? const QuranPage()
+                      : const SizedBox.shrink(),
+                  _opened.contains(4)
+                      ? const ProgressPage()
+                      : const SizedBox.shrink(),
+                  _opened.contains(5)
+                      ? const ProfilePage()
+                      : const SizedBox.shrink(),
+                ],
+              ),
             ),
           ),
           bottomNavigationBar:
@@ -248,92 +284,110 @@ class _MainShellState extends State<MainShell> {
     return SafeArea(
       top: false,
       minimum: const EdgeInsets.fromLTRB(26, 0, 26, 30),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 260),
-        curve: Curves.easeOutCubic,
-        height: _navCollapsed ? 54 : 78,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(radius),
-          border: Border.all(
-            color: Colors.white.withValues(alpha: 0.6),
-            width: 1.2,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.22),
-              blurRadius: 32,
-              offset: const Offset(0, 16),
-            ),
-          ],
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(radius),
-          child: Stack(
-            children: [
-              Positioned.fill(child: _glassLayer(base)),
-              // A thin specular streak near the top edge — a cheap,
-              // static gradient, not a filter — is what actually sells
-              // "glass" over "tinted plastic": real glass catches a
-              // highlight along the edge nearest the light.
-              Positioned(
-                left: 0,
-                right: 0,
-                top: 0,
-                height: 1.4,
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        Colors.white.withValues(alpha: 0),
-                        Colors.white.withValues(alpha: 0.85),
-                        Colors.white.withValues(alpha: 0),
-                      ],
-                    ),
-                  ),
-                ),
+      child: MouseRegion(
+        onEnter: (_) => setState(() => _dockHovering = true),
+        onExit: (_) => setState(() => _dockHovering = false),
+        child: AnimatedScale(
+          // The lift itself: a cursor resting over the dock nudges it
+          // very slightly toward the viewer, on top of the deeper shadow
+          // below — the same "it's floating above you" cue a real macOS
+          // Dock gives on approach, just subtler since this one holds
+          // still rather than magnifying individual icons.
+          scale: _dockHovering ? 1.035 : 1.0,
+          duration: const Duration(milliseconds: 180),
+          curve: Curves.easeOut,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 260),
+            curve: Curves.easeOutCubic,
+            height: _navCollapsed ? 54 : 78,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(radius),
+              border: Border.all(
+                color: Colors.white.withValues(alpha: 0.6),
+                width: 1.2,
               ),
-              AnimatedAlign(
-                duration: const Duration(milliseconds: 380),
-                curve: Curves.easeOutBack,
-                // `AlignmentDirectional`, not `Alignment` — see the flat
-                // bar's matching comment above; this pill has the exact
-                // same RTL bug fixed the same way.
-                alignment: AlignmentDirectional(_index / lastIndex * 2 - 1, 0),
-                child: FractionallySizedBox(
-                  widthFactor: 1 / _items.length,
-                  heightFactor: 0.8,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 6),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black
+                      .withValues(alpha: _dockHovering ? 0.30 : 0.22),
+                  blurRadius: _dockHovering ? 40 : 32,
+                  offset: Offset(0, _dockHovering ? 20 : 16),
+                ),
+              ],
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(radius),
+              child: Stack(
+                children: [
+                  Positioned.fill(child: _glassLayer(base)),
+                  // A thin specular streak near the top edge — a cheap,
+                  // static gradient, not a filter — is what actually sells
+                  // "glass" over "tinted plastic": real glass catches a
+                  // highlight along the edge nearest the light.
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    top: 0,
+                    height: 1.4,
                     child: DecoratedBox(
                       decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(radius - 8),
                         gradient: LinearGradient(
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
                           colors: [
-                            AppColors.primary.withValues(alpha: 0.30),
-                            AppColors.primary.withValues(alpha: 0.12),
+                            Colors.white.withValues(alpha: 0),
+                            Colors.white.withValues(alpha: 0.85),
+                            Colors.white.withValues(alpha: 0),
                           ],
-                        ),
-                        border: Border.all(
-                          color: Colors.white.withValues(alpha: 0.7),
-                          width: 1,
                         ),
                       ),
                     ),
                   ),
-                ),
-              ),
-              Row(
-                children: [
-                  for (var i = 0; i < _items.length; i++)
-                    Expanded(
-                      child: _tab(i, _items[i],
-                          showBar: false, compact: _navCollapsed, iconSize: 28),
+                  AnimatedAlign(
+                    duration: const Duration(milliseconds: 380),
+                    curve: Curves.easeOutBack,
+                    // `AlignmentDirectional`, not `Alignment` — see the flat
+                    // bar's matching comment above; this pill has the exact
+                    // same RTL bug fixed the same way.
+                    alignment:
+                        AlignmentDirectional(_index / lastIndex * 2 - 1, 0),
+                    child: FractionallySizedBox(
+                      widthFactor: 1 / _items.length,
+                      heightFactor: 0.8,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 6),
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(radius - 8),
+                            gradient: LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [
+                                AppColors.primary.withValues(alpha: 0.30),
+                                AppColors.primary.withValues(alpha: 0.12),
+                              ],
+                            ),
+                            border: Border.all(
+                              color: Colors.white.withValues(alpha: 0.7),
+                              width: 1,
+                            ),
+                          ),
+                        ),
+                      ),
                     ),
+                  ),
+                  Row(
+                    children: [
+                      for (var i = 0; i < _items.length; i++)
+                        Expanded(
+                          child: _tab(i, _items[i],
+                              showBar: false,
+                              compact: _navCollapsed,
+                              iconSize: 28),
+                        ),
+                    ],
+                  ),
                 ],
               ),
-            ],
+            ),
           ),
         ),
       ),
