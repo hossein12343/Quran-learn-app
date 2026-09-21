@@ -107,7 +107,13 @@ class _MainShellState extends State<MainShell> {
     );
   }
 
+  /// The plain bar's indicator used to be static — each tab flipping its
+  /// own top stripe on and off — replaced here with the same sliding,
+  /// single-indicator approach as the glass bar below, just styled as a
+  /// thin coloured bar instead of a translucent pill, matching this
+  /// variant's existing flat look.
   Widget _flatNavBar(BuildContext context) {
+    final lastIndex = _items.length - 1;
     return Container(
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
@@ -117,10 +123,33 @@ class _MainShellState extends State<MainShell> {
       ),
       child: SafeArea(
         top: false,
-        child: Row(
+        child: Stack(
           children: [
-            for (var i = 0; i < _items.length; i++)
-              Expanded(child: _tab(i, _items[i])),
+            AnimatedAlign(
+              duration: const Duration(milliseconds: 320),
+              curve: Curves.easeOutCubic,
+              // `AlignmentDirectional`, not `Alignment` — this bar sits
+              // inside the app's ambient `Directionality` (RTL for
+              // Persian, the app's default), and `Row` below already
+              // reorders its children for RTL on its own. `Alignment`'s
+              // x is always *physical* left/right regardless of text
+              // direction, so it would put this indicator on the
+              // opposite side from the tab it's meant to sit under the
+              // moment the app runs RTL — `AlignmentDirectional`'s
+              // start/end follow the same reordering `Row` uses,
+              // keeping the two in sync in either direction.
+              alignment: AlignmentDirectional(_index / lastIndex * 2 - 1, -1),
+              child: FractionallySizedBox(
+                widthFactor: 1 / _items.length,
+                child: Container(height: 3, color: AppColors.primary),
+              ),
+            ),
+            Row(
+              children: [
+                for (var i = 0; i < _items.length; i++)
+                  Expanded(child: _tab(i, _items[i], showBar: false)),
+              ],
+            ),
           ],
         ),
       ),
@@ -187,7 +216,10 @@ class _MainShellState extends State<MainShell> {
               AnimatedAlign(
                 duration: const Duration(milliseconds: 380),
                 curve: Curves.easeOutBack,
-                alignment: Alignment(_index / lastIndex * 2 - 1, 0),
+                // `AlignmentDirectional`, not `Alignment` — see the flat
+                // bar's matching comment above; this pill has the exact
+                // same RTL bug fixed the same way.
+                alignment: AlignmentDirectional(_index / lastIndex * 2 - 1, 0),
                 child: FractionallySizedBox(
                   widthFactor: 1 / _items.length,
                   heightFactor: 0.76,
