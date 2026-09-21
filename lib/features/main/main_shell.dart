@@ -1,3 +1,5 @@
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show ScrollDirection;
 import '../../core/theme/app_theme.dart';
@@ -156,39 +158,24 @@ class _MainShellState extends State<MainShell> {
     );
   }
 
-  /// A cheap approximation of iOS's "Liquid Glass" tab bar — deliberately
-  /// NOT `BackdropFilter` (tried that first; it re-blurs every frame the
-  /// content behind it changes, which on Safari/CanvasKit was real,
-  /// reported lag for an effect that didn't even read as visibly
-  /// glassy). Everything here is a one-time-cost decoration — a
-  /// gradient, a light border, a static shadow — the same rendering
-  /// cost as any other card in this app, nothing recomputed per frame
-  /// *except* the selection highlight below, which is a plain implicit
-  /// animation (`AnimatedAlign`) — cheap, GPU-composited layout math,
-  /// not a filter.
-  ///
-  /// The flat bar's static per-tab top stripe is replaced here with one
-  /// glass "pill" that slides and morphs to the newly-selected tab —
-  /// closer to how Apple's own tab bars (Music included) actually
-  /// animate selection, rather than each tab independently flipping its
-  /// own indicator on and off.
-  Widget _glassNavBar(BuildContext context) {
-    final base = Theme.of(context).colorScheme.surface;
-    const radius = 30.0;
-    final lastIndex = _items.length - 1;
-    // 21pt on left/right/bottom is Apple's own real spec for the
-    // Liquid Glass tab bar's inset from the screen edges, not a
-    // guess — see the Human Interface Guidelines research this was
-    // checked against before writing this.
-    return SafeArea(
-      top: false,
-      minimum: const EdgeInsets.fromLTRB(21, 0, 21, 21),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 260),
-        curve: Curves.easeOutCubic,
-        height: _navCollapsed ? 46 : 66,
+  /// Real "Liquid Glass" this time, not the gradient-only stand-in —
+  /// but scoped specifically to dodge the reason that stand-in existed
+  /// in the first place: a full-bleed `BackdropFilter` re-blurring every
+  /// frame the content behind it changed was genuine, reported lag on
+  /// Safari/CanvasKit. The blur here only ever runs while [_navCollapsed]
+  /// is false — i.e. while the page *isn't* mid-scroll — because Flutter
+  /// only re-renders a frame (blur included) when something on screen
+  /// actually changes, and the one thing that changes constantly is the
+  /// content scrolling behind this bar. The instant a scroll starts,
+  /// [_navCollapsed] flips true and this swaps to the cheap tinted
+  /// gradient below instead — same trick the rest of this bar already
+  /// used, just now reserved for exactly the moment it's needed. A tab
+  /// switch's own ~0.3s animation still repaints under real blur, but
+  /// that's a short burst, not sustained scroll-driven cost.
+  Widget _glassLayer(Color base) {
+    if (_navCollapsed) {
+      return DecoratedBox(
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(radius),
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
@@ -197,15 +184,85 @@ class _MainShellState extends State<MainShell> {
               base.withValues(alpha: 0.78),
             ],
           ),
+        ),
+      );
+    }
+    return BackdropFilter(
+      filter: ui.ImageFilter.compose(
+        outer: ui.ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+        // A standard saturation-boost color matrix (factor 1.35) — real
+        // Liquid Glass doesn't just blur, it visibly *saturates* the
+        // content showing through it. Without this the blur alone reads
+        // as frosted plastic, not glass.
+        inner: const ColorFilter.matrix(<double>[
+          1.27545,
+          -0.25025,
+          -0.02520,
+          0,
+          0,
+          -0.07455,
+          1.09975,
+          -0.02520,
+          0,
+          0,
+          -0.07455,
+          -0.25025,
+          1.32480,
+          0,
+          0,
+          0,
+          0,
+          0,
+          1,
+          0,
+        ]),
+      ),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              base.withValues(alpha: 0.55),
+              base.withValues(alpha: 0.30),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// The flat bar's static per-tab top stripe is replaced here with one
+  /// glass "pill" that slides and morphs to the newly-selected tab —
+  /// closer to how Apple's own tab bars (Music included) actually
+  /// animate selection, rather than each tab independently flipping its
+  /// own indicator on and off.
+  ///
+  /// Sized and spaced to read as a dock actually floating above the
+  /// content — larger, more rounded, and held well clear of every
+  /// screen edge — rather than a bar stuck flush to the bottom.
+  Widget _glassNavBar(BuildContext context) {
+    final base = Theme.of(context).colorScheme.surface;
+    const radius = 36.0;
+    final lastIndex = _items.length - 1;
+    return SafeArea(
+      top: false,
+      minimum: const EdgeInsets.fromLTRB(26, 0, 26, 30),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 260),
+        curve: Curves.easeOutCubic,
+        height: _navCollapsed ? 54 : 78,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(radius),
           border: Border.all(
-            color: Colors.white.withValues(alpha: 0.55),
-            width: 1,
+            color: Colors.white.withValues(alpha: 0.6),
+            width: 1.2,
           ),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.16),
-              blurRadius: 22,
-              offset: const Offset(0, 10),
+              color: Colors.black.withValues(alpha: 0.22),
+              blurRadius: 32,
+              offset: const Offset(0, 16),
             ),
           ],
         ),
@@ -213,6 +270,28 @@ class _MainShellState extends State<MainShell> {
           borderRadius: BorderRadius.circular(radius),
           child: Stack(
             children: [
+              Positioned.fill(child: _glassLayer(base)),
+              // A thin specular streak near the top edge — a cheap,
+              // static gradient, not a filter — is what actually sells
+              // "glass" over "tinted plastic": real glass catches a
+              // highlight along the edge nearest the light.
+              Positioned(
+                left: 0,
+                right: 0,
+                top: 0,
+                height: 1.4,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        Colors.white.withValues(alpha: 0),
+                        Colors.white.withValues(alpha: 0.85),
+                        Colors.white.withValues(alpha: 0),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
               AnimatedAlign(
                 duration: const Duration(milliseconds: 380),
                 curve: Curves.easeOutBack,
@@ -222,9 +301,9 @@ class _MainShellState extends State<MainShell> {
                 alignment: AlignmentDirectional(_index / lastIndex * 2 - 1, 0),
                 child: FractionallySizedBox(
                   widthFactor: 1 / _items.length,
-                  heightFactor: 0.76,
+                  heightFactor: 0.8,
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 5),
+                    padding: const EdgeInsets.symmetric(horizontal: 6),
                     child: DecoratedBox(
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(radius - 8),
@@ -232,12 +311,12 @@ class _MainShellState extends State<MainShell> {
                           begin: Alignment.topLeft,
                           end: Alignment.bottomRight,
                           colors: [
-                            AppColors.primary.withValues(alpha: 0.24),
-                            AppColors.primary.withValues(alpha: 0.10),
+                            AppColors.primary.withValues(alpha: 0.30),
+                            AppColors.primary.withValues(alpha: 0.12),
                           ],
                         ),
                         border: Border.all(
-                          color: Colors.white.withValues(alpha: 0.6),
+                          color: Colors.white.withValues(alpha: 0.7),
                           width: 1,
                         ),
                       ),
@@ -250,7 +329,7 @@ class _MainShellState extends State<MainShell> {
                   for (var i = 0; i < _items.length; i++)
                     Expanded(
                       child: _tab(i, _items[i],
-                          showBar: false, compact: _navCollapsed),
+                          showBar: false, compact: _navCollapsed, iconSize: 28),
                     ),
                 ],
               ),
@@ -269,7 +348,7 @@ class _MainShellState extends State<MainShell> {
   }
 
   Widget _tab(int i, _NavItem item,
-      {bool showBar = true, bool compact = false}) {
+      {bool showBar = true, bool compact = false, double iconSize = 25}) {
     final on = _index == i;
     final color = on ? AppColors.primary : context.mutedColor;
     return MouseRegion(
@@ -297,7 +376,7 @@ class _MainShellState extends State<MainShell> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Icon(on ? item.active : item.inactive,
-                        size: 25, color: color),
+                        size: iconSize, color: color),
                     // Collapsed = icon-only, matching real iOS 26 tab
                     // bars shrinking to "keep navigation instantly
                     // accessible" while giving scrolled content more
