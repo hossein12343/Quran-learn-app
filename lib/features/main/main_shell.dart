@@ -104,15 +104,21 @@ class _MainShellState extends State<MainShell> {
   /// content behind it changes, which on Safari/CanvasKit was real,
   /// reported lag for an effect that didn't even read as visibly
   /// glassy). Everything here is a one-time-cost decoration — a
-  /// gradient, a light border, two static shadows — the same rendering
-  /// cost as any other card in this app, nothing recomputed per frame.
-  /// The "glass" read comes from the *shape* (a floating rounded pill,
-  /// matching iOS 26's own detached tab bar) and light cues (a bright
-  /// top-left-to-bottom-right gradient, a pale edge, an inner glow)
-  /// rather than literally showing blurred content through it.
+  /// gradient, a light border, a static shadow — the same rendering
+  /// cost as any other card in this app, nothing recomputed per frame
+  /// *except* the selection highlight below, which is a plain implicit
+  /// animation (`AnimatedAlign`) — cheap, GPU-composited layout math,
+  /// not a filter.
+  ///
+  /// The flat bar's static per-tab top stripe is replaced here with one
+  /// glass "pill" that slides and morphs to the newly-selected tab —
+  /// closer to how Apple's own tab bars (Music included) actually
+  /// animate selection, rather than each tab independently flipping its
+  /// own indicator on and off.
   Widget _glassNavBar(BuildContext context) {
     final base = Theme.of(context).colorScheme.surface;
     const radius = 30.0;
+    final lastIndex = _items.length - 1;
     return SafeArea(
       top: false,
       minimum: const EdgeInsets.fromLTRB(14, 0, 14, 10),
@@ -142,10 +148,43 @@ class _MainShellState extends State<MainShell> {
         ),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(radius),
-          child: Row(
+          child: Stack(
             children: [
-              for (var i = 0; i < _items.length; i++)
-                Expanded(child: _tab(i, _items[i])),
+              AnimatedAlign(
+                duration: const Duration(milliseconds: 380),
+                curve: Curves.easeOutBack,
+                alignment: Alignment(_index / lastIndex * 2 - 1, 0),
+                child: FractionallySizedBox(
+                  widthFactor: 1 / _items.length,
+                  heightFactor: 0.76,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 5),
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(radius - 8),
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [
+                            AppColors.primary.withValues(alpha: 0.24),
+                            AppColors.primary.withValues(alpha: 0.10),
+                          ],
+                        ),
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.6),
+                          width: 1,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              Row(
+                children: [
+                  for (var i = 0; i < _items.length; i++)
+                    Expanded(child: _tab(i, _items[i], showBar: false)),
+                ],
+              ),
             ],
           ),
         ),
@@ -160,7 +199,7 @@ class _MainShellState extends State<MainShell> {
     });
   }
 
-  Widget _tab(int i, _NavItem item) {
+  Widget _tab(int i, _NavItem item, {bool showBar = true}) {
     final on = _index == i;
     final color = on ? AppColors.primary : context.mutedColor;
     return MouseRegion(
@@ -171,10 +210,11 @@ class _MainShellState extends State<MainShell> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
-              height: 3,
-              color: on ? AppColors.primary : Colors.transparent,
-            ),
+            if (showBar)
+              Container(
+                height: 3,
+                color: on ? AppColors.primary : Colors.transparent,
+              ),
             Padding(
               padding: const EdgeInsets.symmetric(
                   vertical: AppSpacing.sm, horizontal: 4),
