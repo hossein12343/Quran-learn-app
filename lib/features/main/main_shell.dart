@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/theme/app_theme.dart';
 import '../../shared/services/app_state.dart';
+import '../../shared/services/platform_info.dart';
 import '../home/home_page.dart';
 import '../learn/learn_page.dart';
 import '../practice/practice_page.dart';
@@ -71,25 +72,84 @@ class _MainShellState extends State<MainShell> {
                   : const SizedBox.shrink(),
             ],
           ),
-          bottomNavigationBar: Container(
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surface,
-              border: Border(
-                top: BorderSide(color: context.borderColor, width: 2),
-              ),
-            ),
-            child: SafeArea(
-              top: false,
-              child: Row(
-                children: [
-                  for (var i = 0; i < _items.length; i++)
-                    Expanded(child: _tab(i, _items[i])),
-                ],
-              ),
-            ),
-          ),
+          bottomNavigationBar:
+              isIPhone ? _glassNavBar(context) : _flatNavBar(context),
         );
       },
+    );
+  }
+
+  Widget _flatNavBar(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        border: Border(
+          top: BorderSide(color: context.borderColor, width: 2),
+        ),
+      ),
+      child: SafeArea(
+        top: false,
+        child: Row(
+          children: [
+            for (var i = 0; i < _items.length; i++)
+              Expanded(child: _tab(i, _items[i])),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// A cheap approximation of iOS's "Liquid Glass" tab bar — deliberately
+  /// NOT `BackdropFilter` (tried that first; it re-blurs every frame the
+  /// content behind it changes, which on Safari/CanvasKit was real,
+  /// reported lag for an effect that didn't even read as visibly
+  /// glassy). Everything here is a one-time-cost decoration — a
+  /// gradient, a light border, two static shadows — the same rendering
+  /// cost as any other card in this app, nothing recomputed per frame.
+  /// The "glass" read comes from the *shape* (a floating rounded pill,
+  /// matching iOS 26's own detached tab bar) and light cues (a bright
+  /// top-left-to-bottom-right gradient, a pale edge, an inner glow)
+  /// rather than literally showing blurred content through it.
+  Widget _glassNavBar(BuildContext context) {
+    final base = Theme.of(context).colorScheme.surface;
+    const radius = 30.0;
+    return SafeArea(
+      top: false,
+      minimum: const EdgeInsets.fromLTRB(14, 0, 14, 10),
+      child: Container(
+        height: 66,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(radius),
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              base.withValues(alpha: 0.94),
+              base.withValues(alpha: 0.78),
+            ],
+          ),
+          border: Border.all(
+            color: Colors.white.withValues(alpha: 0.55),
+            width: 1,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.16),
+              blurRadius: 22,
+              offset: const Offset(0, 10),
+            ),
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(radius),
+          child: Row(
+            children: [
+              for (var i = 0; i < _items.length; i++)
+                Expanded(child: _tab(i, _items[i])),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
