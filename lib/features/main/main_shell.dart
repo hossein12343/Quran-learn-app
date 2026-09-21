@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show ScrollDirection;
 import '../../core/theme/app_theme.dart';
 import '../../shared/services/app_state.dart';
 import '../../shared/services/platform_info.dart';
@@ -29,6 +30,16 @@ class MainShell extends StatefulWidget {
 class _MainShellState extends State<MainShell> {
   int _index = 0;
 
+  /// True while the glass nav bar is shrunk to its compact, icon-only
+  /// state — real iOS 26 tab bars "shrink to bring focus to the
+  /// content while keeping navigation instantly accessible" while
+  /// scrolling down, then "fluidly expand" back on scrolling up (both
+  /// quoted from Apple's own Liquid Glass announcement). Driven by
+  /// [UserScrollNotification], which only fires on an actual direction
+  /// change, not every scroll frame — cheap to listen to, unlike the
+  /// live blur this whole nav bar deliberately avoids elsewhere.
+  bool _navCollapsed = false;
+
   /// Every tab keeps its place in the `IndexedStack` once opened — that's
   /// what actually preserves scroll position, matching the class doc
   /// comment above — but a tab never opened this app-open is built as a
@@ -53,24 +64,41 @@ class _MainShellState extends State<MainShell> {
       animation: appState,
       builder: (context, _) {
         return Scaffold(
-          body: IndexedStack(
-            index: _index,
-            children: [
-              _opened.contains(0)
-                  ? HomePage(onGoToLearn: () => _goTo(1))
-                  : const SizedBox.shrink(),
-              _opened.contains(1) ? const LearnPage() : const SizedBox.shrink(),
-              _opened.contains(2)
-                  ? const PracticePage()
-                  : const SizedBox.shrink(),
-              _opened.contains(3) ? const QuranPage() : const SizedBox.shrink(),
-              _opened.contains(4)
-                  ? const ProgressPage()
-                  : const SizedBox.shrink(),
-              _opened.contains(5)
-                  ? const ProfilePage()
-                  : const SizedBox.shrink(),
-            ],
+          body: NotificationListener<UserScrollNotification>(
+            onNotification: (n) {
+              if (!isIPhone) return false;
+              final collapse = n.direction == ScrollDirection.reverse;
+              final expand = n.direction == ScrollDirection.forward;
+              if (collapse && !_navCollapsed) {
+                setState(() => _navCollapsed = true);
+              } else if (expand && _navCollapsed) {
+                setState(() => _navCollapsed = false);
+              }
+              return false;
+            },
+            child: IndexedStack(
+              index: _index,
+              children: [
+                _opened.contains(0)
+                    ? HomePage(onGoToLearn: () => _goTo(1))
+                    : const SizedBox.shrink(),
+                _opened.contains(1)
+                    ? const LearnPage()
+                    : const SizedBox.shrink(),
+                _opened.contains(2)
+                    ? const PracticePage()
+                    : const SizedBox.shrink(),
+                _opened.contains(3)
+                    ? const QuranPage()
+                    : const SizedBox.shrink(),
+                _opened.contains(4)
+                    ? const ProgressPage()
+                    : const SizedBox.shrink(),
+                _opened.contains(5)
+                    ? const ProfilePage()
+                    : const SizedBox.shrink(),
+              ],
+            ),
           ),
           bottomNavigationBar:
               isIPhone ? _glassNavBar(context) : _flatNavBar(context),
@@ -119,11 +147,17 @@ class _MainShellState extends State<MainShell> {
     final base = Theme.of(context).colorScheme.surface;
     const radius = 30.0;
     final lastIndex = _items.length - 1;
+    // 21pt on left/right/bottom is Apple's own real spec for the
+    // Liquid Glass tab bar's inset from the screen edges, not a
+    // guess — see the Human Interface Guidelines research this was
+    // checked against before writing this.
     return SafeArea(
       top: false,
-      minimum: const EdgeInsets.fromLTRB(14, 0, 14, 10),
-      child: Container(
-        height: 66,
+      minimum: const EdgeInsets.fromLTRB(21, 0, 21, 21),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 260),
+        curve: Curves.easeOutCubic,
+        height: _navCollapsed ? 46 : 66,
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(radius),
           gradient: LinearGradient(
@@ -182,7 +216,10 @@ class _MainShellState extends State<MainShell> {
               Row(
                 children: [
                   for (var i = 0; i < _items.length; i++)
-                    Expanded(child: _tab(i, _items[i], showBar: false)),
+                    Expanded(
+                      child: _tab(i, _items[i],
+                          showBar: false, compact: _navCollapsed),
+                    ),
                 ],
               ),
             ],
@@ -199,7 +236,8 @@ class _MainShellState extends State<MainShell> {
     });
   }
 
-  Widget _tab(int i, _NavItem item, {bool showBar = true}) {
+  Widget _tab(int i, _NavItem item,
+      {bool showBar = true, bool compact = false}) {
     final on = _index == i;
     final color = on ? AppColors.primary : context.mutedColor;
     return MouseRegion(
@@ -208,6 +246,7 @@ class _MainShellState extends State<MainShell> {
         behavior: HitTestBehavior.opaque,
         onTap: () => _goTo(i),
         child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
           mainAxisSize: MainAxisSize.min,
           children: [
             if (showBar)
@@ -227,16 +266,33 @@ class _MainShellState extends State<MainShell> {
                   children: [
                     Icon(on ? item.active : item.inactive,
                         size: 25, color: color),
-                    const SizedBox(height: 2),
-                    Text(
-                      item.label,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: on ? FontWeight.w800 : FontWeight.w600,
-                        color: color,
-                      ),
+                    // Collapsed = icon-only, matching real iOS 26 tab
+                    // bars shrinking to "keep navigation instantly
+                    // accessible" while giving scrolled content more
+                    // room — AnimatedSize keeps the label's own
+                    // collapse smooth instead of an abrupt cut.
+                    AnimatedSize(
+                      duration: const Duration(milliseconds: 200),
+                      curve: Curves.easeOutCubic,
+                      child: compact
+                          ? const SizedBox.shrink()
+                          : Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const SizedBox(height: 2),
+                                Text(
+                                  item.label,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight:
+                                        on ? FontWeight.w800 : FontWeight.w600,
+                                    color: color,
+                                  ),
+                                ),
+                              ],
+                            ),
                     ),
                   ],
                 ),
