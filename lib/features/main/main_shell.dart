@@ -49,13 +49,6 @@ class _MainShellState extends State<MainShell> {
   /// page underneath it.
   bool _dockHovering = false;
 
-  /// How much clear space the floating dock needs reserved at the bottom
-  /// of the content behind it (its own height at its tallest, plus the
-  /// margin holding it off the screen edge, plus a little breathing
-  /// room) — used below so a page's last item can still scroll clear of
-  /// the dock instead of staying permanently hidden under it.
-  static const _dockReserve = 120.0;
-
   /// Every tab keeps its place in the `IndexedStack` once opened — that's
   /// what actually preserves scroll position, matching the class doc
   /// comment above — but a tab never opened this app-open is built as a
@@ -79,7 +72,6 @@ class _MainShellState extends State<MainShell> {
     return AnimatedBuilder(
       animation: appState,
       builder: (context, _) {
-        final mq = MediaQuery.of(context);
         return Scaffold(
           // On iPhone the dock is its own floating layer over the content,
           // not a strip the content stops short of — extendBody is
@@ -102,40 +94,28 @@ class _MainShellState extends State<MainShell> {
               }
               return false;
             },
-            child: MediaQuery(
-              // Widens the bottom safe-area inset any well-behaved page
-              // below already respects (via SafeArea/viewPadding), so
-              // scrolling can still clear the dock even though the body
-              // itself now extends full-height behind it.
-              data: isIPhone
-                  ? mq.copyWith(
-                      padding: mq.padding
-                          .copyWith(bottom: mq.padding.bottom + _dockReserve),
-                    )
-                  : mq,
-              child: IndexedStack(
-                index: _index,
-                children: [
-                  _opened.contains(0)
-                      ? HomePage(onGoToLearn: () => _goTo(1))
-                      : const SizedBox.shrink(),
-                  _opened.contains(1)
-                      ? const LearnPage()
-                      : const SizedBox.shrink(),
-                  _opened.contains(2)
-                      ? const PracticePage()
-                      : const SizedBox.shrink(),
-                  _opened.contains(3)
-                      ? const QuranPage()
-                      : const SizedBox.shrink(),
-                  _opened.contains(4)
-                      ? const ProgressPage()
-                      : const SizedBox.shrink(),
-                  _opened.contains(5)
-                      ? const ProfilePage()
-                      : const SizedBox.shrink(),
-                ],
-              ),
+            child: IndexedStack(
+              index: _index,
+              children: [
+                _opened.contains(0)
+                    ? HomePage(onGoToLearn: () => _goTo(1))
+                    : const SizedBox.shrink(),
+                _opened.contains(1)
+                    ? const LearnPage()
+                    : const SizedBox.shrink(),
+                _opened.contains(2)
+                    ? const PracticePage()
+                    : const SizedBox.shrink(),
+                _opened.contains(3)
+                    ? const QuranPage()
+                    : const SizedBox.shrink(),
+                _opened.contains(4)
+                    ? const ProgressPage()
+                    : const SizedBox.shrink(),
+                _opened.contains(5)
+                    ? const ProfilePage()
+                    : const SizedBox.shrink(),
+              ],
             ),
           ),
           bottomNavigationBar:
