@@ -1,5 +1,3 @@
-import 'dart:ui' as ui;
-
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show ScrollDirection;
 import '../../core/theme/app_theme.dart';
@@ -174,75 +172,27 @@ class _MainShellState extends State<MainShell> {
     );
   }
 
-  /// Real "Liquid Glass" this time, not the gradient-only stand-in —
-  /// but scoped specifically to dodge the reason that stand-in existed
-  /// in the first place: a full-bleed `BackdropFilter` re-blurring every
-  /// frame the content behind it changed was genuine, reported lag on
-  /// Safari/CanvasKit. The blur here only ever runs while [_navCollapsed]
-  /// is false — i.e. while the page *isn't* mid-scroll — because Flutter
-  /// only re-renders a frame (blur included) when something on screen
-  /// actually changes, and the one thing that changes constantly is the
-  /// content scrolling behind this bar. The instant a scroll starts,
-  /// [_navCollapsed] flips true and this swaps to the cheap tinted
-  /// gradient below instead — same trick the rest of this bar already
-  /// used, just now reserved for exactly the moment it's needed. A tab
-  /// switch's own ~0.3s animation still repaints under real blur, but
-  /// that's a short burst, not sustained scroll-driven cost.
+  /// Real `BackdropFilter` blur was tried here twice now — once full-bleed,
+  /// once scoped to only run while the bar was idle (not mid-scroll) — and
+  /// both times came back as genuine, reported lag on the real device. The
+  /// idle-only gate turned out to have a real gap too: [_navCollapsed] only
+  /// goes true while the *content* is being scrolled away from view — a
+  /// scroll in the other direction (revealing earlier content) expands the
+  /// bar again immediately, so the expensive blur was still recomputing
+  /// every frame for that direction's entire scroll, not just briefly. This
+  /// is deliberately not a third attempt at tuning that further — it's the
+  /// same cheap, one-time-cost tinted gradient this bar used before either
+  /// attempt, which is the only version of this that has never lagged.
   Widget _glassLayer(Color base) {
-    if (_navCollapsed) {
-      return DecoratedBox(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              base.withValues(alpha: 0.94),
-              base.withValues(alpha: 0.78),
-            ],
-          ),
-        ),
-      );
-    }
-    return BackdropFilter(
-      filter: ui.ImageFilter.compose(
-        outer: ui.ImageFilter.blur(sigmaX: 16, sigmaY: 16),
-        // A standard saturation-boost color matrix (factor 1.35) — real
-        // Liquid Glass doesn't just blur, it visibly *saturates* the
-        // content showing through it. Without this the blur alone reads
-        // as frosted plastic, not glass.
-        inner: const ColorFilter.matrix(<double>[
-          1.27545,
-          -0.25025,
-          -0.02520,
-          0,
-          0,
-          -0.07455,
-          1.09975,
-          -0.02520,
-          0,
-          0,
-          -0.07455,
-          -0.25025,
-          1.32480,
-          0,
-          0,
-          0,
-          0,
-          0,
-          1,
-          0,
-        ]),
-      ),
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              base.withValues(alpha: 0.55),
-              base.withValues(alpha: 0.30),
-            ],
-          ),
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            base.withValues(alpha: _navCollapsed ? 0.94 : 0.86),
+            base.withValues(alpha: _navCollapsed ? 0.78 : 0.62),
+          ],
         ),
       ),
     );
