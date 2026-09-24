@@ -31,7 +31,7 @@ class _SplashPageState extends State<SplashPage> {
   }
 
   Future<void> _go() async {
-    // Handle an Apple/Google sign-in (or password-reset link) landing back
+    // Handle a Google sign-in (or password-reset link) landing back
     // here before anything else — it's a no-op unless the URL fragment
     // actually carries Supabase's session tokens (see
     // AppState.startOAuthSignIn).

@@ -633,9 +633,9 @@ class AppState extends ChangeNotifier {
     pendingPasswordReset = false;
   }
 
-  // ----------------------------------------------- Apple / Google sign-in
+  // ------------------------------------------------------- Google sign-in
 
-  /// Redirects the browser to [provider]'s sign-in (`apple`, `google`) —
+  /// Redirects the browser to [provider]'s sign-in (`google`) —
   /// Supabase itself brokers the whole OAuth exchange, so there's nothing
   /// to store beforehand. [redirectUrl] must be on the project's Auth > URL
   /// Configuration allow-list. Throws [NetException] if the provider isn't
@@ -686,13 +686,12 @@ class AppState extends ChangeNotifier {
         notifyListeners();
         unawaited(_finishSigningIn().then((_) {
           // The `handle_new_user` trigger only knows about `display_name`
-          // (what password signup sends) — Google's (and sometimes
-          // Apple's) name lands in metadata under a different key.
+          // (what password signup sends) — Google's name lands in
+          // metadata under a different key.
           // Applied after the background sync rather than gating
           // navigation on it; whichever name was already on the profile
           // shows first and this corrects it a moment later, same as
-          // `_finishSigningIn`'s own fields do. Apple usually shares no
-          // name at all, in which case the profile keeps its default.
+          // `_finishSigningIn`'s own fields do.
           final providerName = (session.metadata['full_name'] ??
               session.metadata['name']) as String?;
           if (providerName != null && providerName.isNotEmpty) {

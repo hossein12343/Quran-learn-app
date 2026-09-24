@@ -25,6 +25,39 @@ class SwipeBackPageTransitionsBuilder extends CupertinoPageTransitionsBuilder {
   }
 }
 
+/// Switching between top-level screens (splash, sign-in, onboarding, the
+/// main tabs): a short cross-fade that settles in from a hair smaller, the
+/// way an iPhone app moves from its launch screen to its first screen. A
+/// sideways slide says "you went one level deeper", which these aren't —
+/// it's what made landing on Home after Google sign-in look off.
+class RootRoute<T> extends PageRouteBuilder<T> {
+  RootRoute({required WidgetBuilder builder, super.settings})
+      : super(
+          transitionDuration: const Duration(milliseconds: 420),
+          reverseTransitionDuration: const Duration(milliseconds: 300),
+          pageBuilder: (context, _, __) => builder(context),
+          transitionsBuilder: (context, animation, secondaryAnimation, child) {
+            final curved = CurvedAnimation(
+                parent: animation, curve: const Cubic(0.32, 0.72, 0, 1));
+            return FadeTransition(
+              opacity: curved,
+              child: ScaleTransition(
+                scale: Tween<double>(begin: 0.97, end: 1).animate(curved),
+                // When a page is opened on top, this screen still drifts
+                // aside underneath it the iOS way (and follows the finger
+                // on swipe-back) — only its own arrival is a fade.
+                child: CupertinoPageTransition(
+                  primaryRouteAnimation: kAlwaysCompleteAnimation,
+                  secondaryRouteAnimation: secondaryAnimation,
+                  linearTransition: false,
+                  child: child,
+                ),
+              ),
+            );
+          },
+        );
+}
+
 class _SwipeBack<T> extends StatefulWidget {
   final PageRoute<T> route;
   final Widget child;

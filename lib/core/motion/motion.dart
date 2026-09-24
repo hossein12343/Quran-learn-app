@@ -25,9 +25,13 @@ abstract final class Motion {
 
 /// Content fades, rises and firms up as a screen opens.
 ///
-/// Only when the screen opens: a row built because the user is scrolling
-/// shows up immediately, like a native list. Lazily-built list rows used to
-/// each float in over half a second while you scrolled.
+/// Only when the screen opens on its own — switching to a tab, say. Two
+/// cases show the content immediately instead:
+/// - a row built because the user is scrolling, like a native list (rows
+///   used to each float in over half a second while you scrolled);
+/// - a page that is itself still arriving (sliding or fading in), which
+///   would otherwise stack two motions on top of each other. That stacking
+///   is what made landing on Home after sign-in look off.
 class Reveal extends StatefulWidget {
   final Widget child;
   final int index;
@@ -50,17 +54,22 @@ class _RevealState extends State<Reveal> with SingleTickerProviderStateMixin {
   late final Animation<double> _a =
       CurvedAnimation(parent: _c, curve: Motion.smooth);
   Timer? _delay;
+  bool _started = false;
 
   @override
-  void initState() {
-    super.initState();
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_started) return;
+    _started = true;
     final scrolling = context
             .findAncestorStateOfType<ScrollableState>()
             ?.position
             .isScrollingNotifier
             .value ??
         false;
-    if (scrolling) {
+    final pageArriving =
+        ModalRoute.of(context)?.animation?.isCompleted == false;
+    if (scrolling || pageArriving) {
       _c.value = 1;
       return;
     }

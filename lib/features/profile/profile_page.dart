@@ -288,8 +288,8 @@ class ProfilePage extends StatelessWidget {
     );
   }
 
-  /// Signing in with Apple usually shares no name, so without this those
-  /// accounts would stay "دانش‌آموز" forever.
+  /// Without this, an account whose sign-in shared no name would stay
+  /// "دانش‌آموز" forever.
   Future<void> _editName(BuildContext context) async {
     final controller = TextEditingController(text: appState.displayName);
     final name = await showDialog<String>(

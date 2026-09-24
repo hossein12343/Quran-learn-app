@@ -67,9 +67,49 @@ class _MainShellState extends State<MainShell> {
   /// `.ql-dock`'s `height` and `bottom` in `glass_dock_factory_web.dart`.
   static const _dockFootprint = 64.0 + 21.0;
 
+  /// This screen's own route animation (fading in after sign-in). The
+  /// dock waits for it to finish and then rises in; appearing on the very
+  /// first frame, over a page that hadn't arrived yet, looked broken.
+  Animation<double>? _routeAnimation;
+
+  /// On its very first build the route still reports its animation as
+  /// finished — it only starts on the next frame — which made the dock
+  /// flash on for a frame or two before hiding. Waiting one frame gives
+  /// the real status.
+  bool _firstFrameDone = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final animation = ModalRoute.of(context)?.animation;
+    if (animation != _routeAnimation) {
+      _routeAnimation?.removeStatusListener(_onRouteStatus);
+      _routeAnimation = animation?..addStatusListener(_onRouteStatus);
+    }
+  }
+
+  void _onRouteStatus(AnimationStatus _) {
+    if (mounted) setState(() {});
+  }
+
+  /// How many shells are alive. A shell being replaced by another one is
+  /// disposed only after the new one has finished arriving, so hiding the
+  /// dock unconditionally here would hide the new shell's dock.
+  static int _live = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _live++;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) setState(() => _firstFrameDone = true);
+    });
+  }
+
   @override
   void dispose() {
-    glassDock.hide();
+    _routeAnimation?.removeStatusListener(_onRouteStatus);
+    if (--_live == 0) glassDock.hide();
     super.dispose();
   }
 
@@ -155,7 +195,9 @@ class _MainShellState extends State<MainShell> {
       // would cover dialogs, sheets, popup menus and every pushed page.
       // All of those are routes, so "this route is the top one" is exactly
       // when it should be showing.
-      visible: ModalRoute.of(context)?.isCurrent ?? true,
+      visible: _firstFrameDone &&
+          (ModalRoute.of(context)?.isCurrent ?? true) &&
+          (_routeAnimation?.isCompleted ?? true),
       compact: _navCollapsed,
       dark: appState.darkMode,
       rtl: Directionality.of(context) == TextDirection.rtl,

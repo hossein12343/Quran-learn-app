@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_web_plugins/url_strategy.dart';
+import 'core/motion/page_transitions.dart';
 import 'core/theme/app_theme.dart';
 import 'features/auth/auth_pages.dart';
 import 'features/main/main_shell.dart';
@@ -207,6 +208,19 @@ class _RouteLogger extends NavigatorObserver {
 /// Claude memory for the full story if this resurfaces.
 final _routeLogger = _RouteLogger();
 
+/// Path-based URLs (see usePathUrlStrategy in main) mean the browser can
+/// genuinely land on the bare root path — every OAuth redirect starts
+/// there — so '/' needs its own entry, not just '/splash'.
+final Map<String, WidgetBuilder> _rootPages = {
+  '/': (_) => const SplashPage(),
+  '/splash': (_) => const SplashPage(),
+  '/login': (_) => const LoginPage(),
+  '/signup': (_) => const SignupPage(),
+  '/onboarding': (_) => const OnboardingPage(),
+  '/new-password': (_) => const NewPasswordPage(),
+  '/home': (_) => const MainShell(),
+};
+
 class QuranLearnApp extends StatelessWidget {
   const QuranLearnApp({super.key});
 
@@ -251,26 +265,34 @@ class QuranLearnApp extends StatelessWidget {
               child: child!,
             ),
           ),
-          initialRoute: '/splash',
-          routes: <String, WidgetBuilder>{
-            // Path-based URLs (see usePathUrlStrategy above) mean the
-            // browser can genuinely land on the bare root path — every
-            // OAuth redirect starts there — so it needs its own entry,
-            // not just '/splash'. `initialRoute` only seeds the very
-            // first navigation; it does not make '/' itself resolvable.
-            '/': (_) => const SplashPage(),
-            '/splash': (_) => const SplashPage(),
-            '/login': (_) => const LoginPage(),
-            '/signup': (_) => const SignupPage(),
-            '/onboarding': (_) => const OnboardingPage(),
-            '/new-password': (_) => const NewPasswordPage(),
-            '/home': (_) => const MainShell(),
+          // Always exactly one splash screen, whatever path the browser
+          // opened. `initialRoute: '/splash'` made Flutter stack '/' *and*
+          // '/splash' — two splash screens, each running its own sign-in
+          // check and each navigating to Home, so every launch (and every
+          // return from Google sign-in) played two transitions back to
+          // back, the second replacing the first. The splash screen decides
+          // where to go from here.
+          onGenerateInitialRoutes: (_) => [
+            RootRoute<void>(
+              settings: const RouteSettings(name: '/'),
+              builder: (_) => const SplashPage(),
+            ),
+          ],
+          // Every named route is a top-level screen (splash, sign-in,
+          // onboarding, the main tabs), so switching between them
+          // cross-fades rather than sliding sideways like opening a
+          // sub-page — see [RootRoute].
+          onGenerateRoute: (routeSettings) {
+            final page = _rootPages[routeSettings.name];
+            return page == null
+                ? null
+                : RootRoute<void>(settings: routeSettings, builder: page);
           },
           // Defensive fallback so an unrecognized path (e.g. a stray
           // query string PocketBase/Supabase might append) never leaves
           // the app on a blank/dead screen the way '/' briefly did.
-          onUnknownRoute: (_) =>
-              MaterialPageRoute(builder: (_) => const SplashPage()),
+          onUnknownRoute: (routeSettings) => RootRoute<void>(
+              settings: routeSettings, builder: (_) => const SplashPage()),
         );
       },
     );

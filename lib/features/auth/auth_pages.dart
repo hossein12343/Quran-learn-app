@@ -256,9 +256,9 @@ class _SecurityCheck extends StatelessWidget {
 
 // --------------------------------------------------------------- social
 
-/// "Continue with Apple" / "Continue with Google". Only providers actually
-/// switched on in the Supabase dashboard get a button, so Apple appears on
-/// its own the moment it's configured there.
+/// "Continue with Google" — shown only while Google is switched on in the
+/// Supabase dashboard, so a misconfigured provider never offers a button
+/// that leads to an error page.
 class _SocialButtons extends StatefulWidget {
   const _SocialButtons();
 
@@ -312,19 +312,7 @@ class _SocialButtonsState extends State<_SocialButtons> {
       // jump when they arrive.
       return const SizedBox(height: 56);
     }
-    final dark = Theme.of(context).brightness == Brightness.dark;
     final buttons = <Widget>[
-      // Apple's guidelines ask for its button to be at least as prominent
-      // as any other sign-in option, so it goes first.
-      if (providers.contains('apple'))
-        _ProviderButton(
-          label: _busy == 'apple' ? 'در حال انتقال…' : 'ادامه با اپل',
-          leading: Icon(Icons.apple,
-              size: 24, color: dark ? Colors.black : Colors.white),
-          background: dark ? Colors.white : Colors.black,
-          foreground: dark ? Colors.black : Colors.white,
-          onTap: _busy == null ? () => _go('apple') : null,
-        ),
       if (providers.contains('google'))
         _ProviderButton(
           label: _busy == 'google' ? 'در حال انتقال…' : 'ادامه با گوگل',
@@ -468,8 +456,8 @@ class SignupPage extends StatelessWidget {
   Widget build(BuildContext context) => const AuthPage(signUp: true);
 }
 
-/// Signing in and creating an account on one screen: Apple and Google on
-/// top (one tap, no code), then email with a toggle between the two modes.
+/// Signing in and creating an account on one screen: Google on top (one
+/// tap, no code), then email with a toggle between the two modes.
 /// They used to be separate pages, each with its own copy of the form.
 class AuthPage extends StatefulWidget {
   final bool signUp;

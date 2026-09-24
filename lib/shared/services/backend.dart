@@ -156,7 +156,7 @@ class Backend {
     return AuthSession.fromJson(jsonDecode(res.body) as Map<String, dynamic>);
   }
 
-  /// Which third-party sign-in providers (`google`, `apple`, ...) are
+  /// Which third-party sign-in providers (e.g. `google`) are
   /// switched on in the Supabase dashboard, read from GoTrue's public
   /// settings endpoint. The sign-in screen only shows buttons for these,
   /// so a provider appears in the app the moment it's configured there.

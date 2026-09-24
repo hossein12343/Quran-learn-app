@@ -140,14 +140,26 @@ class _HomePageState extends State<HomePage> {
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: Theme.of(context).textTheme.headlineMedium),
-                        if (_hijriToday != null) ...[
-                          const SizedBox(height: 2),
-                          Text(_hijriToday!.label,
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .bodySmall
-                                  ?.copyWith(color: context.mutedColor)),
-                        ],
+                        const SizedBox(height: 2),
+                        // The line's space is held from the first frame and
+                        // the date fades in when it arrives. Appearing later
+                        // (and wrapping to two lines) used to shove the whole
+                        // page down just after it opened.
+                        AnimatedOpacity(
+                          opacity: _hijriToday == null ? 0 : 1,
+                          duration: Motion.enter,
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            alignment: AlignmentDirectional.centerStart,
+                            child: Text(_hijriToday?.label ?? ' ',
+                                maxLines: 1,
+                                softWrap: false,
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodySmall
+                                    ?.copyWith(color: context.mutedColor)),
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -185,10 +197,20 @@ class _HomePageState extends State<HomePage> {
             const SizedBox(height: AppSpacing.lg),
             Reveal(index: 0, child: _weekStrip()),
             const SizedBox(height: AppSpacing.xl),
-            if (appState.dueForReview.isNotEmpty) ...[
-              Reveal(index: 1, child: _reviewBanner()),
-              const SizedBox(height: AppSpacing.xl),
-            ],
+            // Due reviews often arrive a moment after the page opens (they
+            // come with the progress synced in after sign-in), so the banner
+            // grows in rather than popping in and shoving everything down.
+            AnimatedSize(
+              duration: Motion.enter,
+              curve: Motion.smooth,
+              alignment: Alignment.topCenter,
+              child: appState.dueForReview.isEmpty
+                  ? const SizedBox(width: double.infinity)
+                  : Padding(
+                      padding: const EdgeInsets.only(bottom: AppSpacing.xl),
+                      child: Reveal(index: 1, child: _reviewBanner()),
+                    ),
+            ),
             Reveal(index: 2, child: _continueCard(next)),
             const SizedBox(height: AppSpacing.xl),
             Reveal(index: 3, child: _questsCard()),
