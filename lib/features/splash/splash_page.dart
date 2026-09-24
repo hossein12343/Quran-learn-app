@@ -31,10 +31,11 @@ class _SplashPageState extends State<SplashPage> {
   }
 
   Future<void> _go() async {
-    // Handle a Google OAuth redirect landing back here before anything
-    // else — it's a no-op unless the URL fragment actually carries
-    // Supabase's session tokens (see AppState.startGoogleSignIn).
-    final signedInByGoogle = await appState.completeOAuthRedirectIfPresent();
+    // Handle an Apple/Google sign-in (or password-reset link) landing back
+    // here before anything else — it's a no-op unless the URL fragment
+    // actually carries Supabase's session tokens (see
+    // AppState.startOAuthSignIn).
+    final signedInByRedirect = await appState.completeOAuthRedirectIfPresent();
     // Skip if OAuth already signed someone in this boot — completeOAuth-
     // RedirectIfPresent already persisted the session, so restoreSession()
     // would just redundantly re-fetch the same profile a second time via
@@ -42,7 +43,7 @@ class _SplashPageState extends State<SplashPage> {
     // calls right as SplashPage is trying to navigate away (this is what
     // caused a real `_elements.contains(element)` Navigator crash — see
     // the note on `_routeLogger` in main.dart).
-    if (!signedInByGoogle) {
+    if (!signedInByRedirect) {
       if (appState.hasStoredSession) {
         // A persisted login is on this device — wait for the token refresh
         // (bounded) before deciding where to go, so a returning user lands
@@ -75,8 +76,10 @@ class _SplashPageState extends State<SplashPage> {
     // already use.
     await Future<void>.delayed(const Duration(milliseconds: 300));
     if (!mounted) return;
-    if (signedInByGoogle) {
-      Navigator.of(context).pushReplacementNamed('/home');
+    if (signedInByRedirect) {
+      Navigator.of(context).pushReplacementNamed(
+        appState.pendingPasswordReset ? '/new-password' : '/home',
+      );
       return;
     }
     // Came back from the Google redirect but the session isn't confirmed

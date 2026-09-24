@@ -263,6 +263,7 @@ class QuranLearnApp extends StatelessWidget {
             '/login': (_) => const LoginPage(),
             '/signup': (_) => const SignupPage(),
             '/onboarding': (_) => const OnboardingPage(),
+            '/new-password': (_) => const NewPasswordPage(),
             '/home': (_) => const MainShell(),
           },
           // Defensive fallback so an unrecognized path (e.g. a stray

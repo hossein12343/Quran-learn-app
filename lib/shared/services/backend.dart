@@ -62,12 +62,22 @@ class Backend {
 
   /// Confirms the code Supabase emailed after [signUp]. Success returns a
   /// real session — this is the actual "signed in" moment.
-  static Future<AuthSession> confirmSignup(String email, String code) async {
+  static Future<AuthSession> confirmSignup(String email, String code) =>
+      _verifyEmailCode('signup', email, code);
+
+  /// Confirms the code from a password-reset email ([recoverPassword]).
+  /// Success signs the user in, so [updatePassword] can then set the new
+  /// password on that session.
+  static Future<AuthSession> confirmRecovery(String email, String code) =>
+      _verifyEmailCode('recovery', email, code);
+
+  static Future<AuthSession> _verifyEmailCode(
+      String type, String email, String code) async {
     final res = await Net.request(
       'POST',
       '$baseUrl/auth/v1/verify',
       headers: _headers(),
-      body: {'type': 'signup', 'email': email, 'token': code},
+      body: {'type': type, 'email': email, 'token': code},
     );
     if (!res.ok) throw _authException(res.body);
     return AuthSession.fromJson(jsonDecode(res.body) as Map<String, dynamic>);
@@ -80,6 +90,35 @@ class Backend {
       '$baseUrl/auth/v1/resend',
       headers: _headers(),
       body: {'type': 'signup', 'email': email},
+    );
+    if (!res.ok) throw _authException(res.body);
+  }
+
+  /// Emails a password-reset code (and link) to [email]. Supabase answers
+  /// the same way whether or not an account exists, so this can't be used
+  /// to find out who has one.
+  static Future<void> recoverPassword(String email,
+      {String? captchaToken}) async {
+    final res = await Net.request(
+      'POST',
+      '$baseUrl/auth/v1/recover',
+      headers: _headers(),
+      body: {
+        'email': email,
+        if (captchaToken != null)
+          'gotrue_meta_security': {'captcha_token': captchaToken},
+      },
+    );
+    if (!res.ok) throw _authException(res.body);
+  }
+
+  /// Sets a new password for the signed-in user (after [confirmRecovery]).
+  static Future<void> updatePassword(String token, String password) async {
+    final res = await Net.request(
+      'PUT',
+      '$baseUrl/auth/v1/user',
+      headers: _headers(token),
+      body: {'password': password},
     );
     if (!res.ok) throw _authException(res.body);
   }
@@ -117,10 +156,11 @@ class Backend {
     return AuthSession.fromJson(jsonDecode(res.body) as Map<String, dynamic>);
   }
 
-  /// Checks GoTrue's public settings endpoint so the UI can fail with a
-  /// friendly message instead of redirecting into a raw JSON error page
-  /// when nobody has configured the Google provider yet.
-  static Future<bool> isGoogleSignInEnabled() async {
+  /// Which third-party sign-in providers (`google`, `apple`, ...) are
+  /// switched on in the Supabase dashboard, read from GoTrue's public
+  /// settings endpoint. The sign-in screen only shows buttons for these,
+  /// so a provider appears in the app the moment it's configured there.
+  static Future<Set<String>> enabledProviders() async {
     final res = await Net.request(
       'GET',
       '$baseUrl/auth/v1/settings',
@@ -128,17 +168,19 @@ class Backend {
     );
     if (!res.ok) throw _authException(res.body);
     final data = jsonDecode(res.body) as Map<String, dynamic>;
-    final external = data['external'] as Map<String, dynamic>?;
-    return external?['google'] == true;
+    final external = data['external'] as Map<String, dynamic>? ?? const {};
+    return {
+      for (final e in external.entries)
+        if (e.value == true && e.key != 'email' && e.key != 'phone') e.key,
+    };
   }
 
-  /// The redirect URL to send the browser to for Google sign-in. Supabase
-  /// itself brokers the OAuth2/PKCE dance (state, code verifier, talking
-  /// to Google) — the app just redirects here and, on return, reads the
-  /// session Supabase appends to the URL fragment. See
-  /// `AppState.startGoogleSignIn`/`completeOAuthRedirectIfPresent`.
-  static String googleAuthUrl(String redirectUrl) =>
-      '$baseUrl/auth/v1/authorize?provider=google&redirect_to=${Uri.encodeComponent(redirectUrl)}';
+  /// Where to send the browser for [provider] sign-in. Supabase brokers the
+  /// whole OAuth exchange itself — the app just redirects here and, on
+  /// return, reads the session Supabase appends to the URL fragment. See
+  /// `AppState.startOAuthSignIn`/`completeOAuthRedirectIfPresent`.
+  static String oauthUrl(String provider, String redirectUrl) =>
+      '$baseUrl/auth/v1/authorize?provider=$provider&redirect_to=${Uri.encodeComponent(redirectUrl)}';
 
   // --------------------------------------------------------------- profile
 
@@ -432,13 +474,30 @@ class Backend {
   /// shaped text) that should never reach a user. It now returns a fixed,
   /// generic, safe message instead; the raw body still reaches
   /// `AppLog.warn`/`.error` in full via [NetException.technicalDetail].
+  /// GoTrue's messages are English and written for developers ("Invalid
+  /// login credentials"). Known ones become plain Persian; the raw text
+  /// stays in [NetException.technicalDetail] for debugging, and the code
+  /// lets the sign-in screen act on it (e.g. jump to the code screen for
+  /// an unconfirmed email).
   static NetException _authException(String body) {
     try {
       final data = jsonDecode(body) as Map<String, dynamic>;
+      final code = (data['error_code'] ?? data['code'])?.toString();
       final msg = (data['msg'] ?? data['error_description'] ?? data['error'])
           ?.toString();
+      final friendly = _authMessages[code] ??
+          (msg != null && msg.contains('seconds')
+              ? 'لطفاً یک دقیقه صبر کنید و دوباره امتحان کنید.'
+              : null);
+      if (friendly != null) {
+        return NetException(friendly, technicalDetail: body, code: code);
+      }
       if (msg != null && msg.isNotEmpty) {
-        return NetException(msg, technicalDetail: body);
+        return NetException(
+          'مشکلی پیش آمد. لطفاً دوباره امتحان کنید.',
+          technicalDetail: body,
+          code: code,
+        );
       }
     } on Object {
       // Not JSON, or not the expected shape — fall through to the safe
@@ -471,6 +530,24 @@ class Backend {
     );
   }
 }
+
+const Map<String, String> _authMessages = {
+  'invalid_credentials': 'ایمیل یا رمز عبور درست نیست.',
+  'email_not_confirmed': 'این ایمیل هنوز تأیید نشده است.',
+  'user_already_exists': 'با این ایمیل قبلاً حساب ساخته شده است. وارد شوید.',
+  'email_exists': 'با این ایمیل قبلاً حساب ساخته شده است. وارد شوید.',
+  'otp_expired': 'این کد درست نیست یا منقضی شده است.',
+  'weak_password': 'این رمز عبور خیلی ساده است. رمز قوی‌تری انتخاب کنید.',
+  'same_password': 'رمز جدید باید با رمز قبلی فرق داشته باشد.',
+  'email_address_invalid': 'این آدرس ایمیل معتبر نیست.',
+  'over_email_send_rate_limit':
+      'ایمیل‌های زیادی ارسال شده است. چند دقیقه بعد دوباره امتحان کنید.',
+  'over_request_rate_limit':
+      'تلاش‌های زیادی انجام شد. چند دقیقه بعد دوباره امتحان کنید.',
+  'captcha_failed': 'بررسی امنیتی کامل نشد. دوباره امتحان کنید.',
+  'signup_disabled': 'ثبت‌نام در حال حاضر بسته است.',
+  'user_banned': 'این حساب غیرفعال شده است.',
+};
 
 /// A GoTrue auth response, normalized — the same shape whether it came
 /// from signup confirmation, password login, or a token refresh.

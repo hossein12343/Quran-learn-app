@@ -7,7 +7,9 @@
 /// picks the right one at compile time via conditional export.
 library net;
 
-export 'net_stub.dart' if (dart.library.io) 'net_io.dart' if (dart.library.html) 'net_web.dart';
+export 'net_stub.dart'
+    if (dart.library.io) 'net_io.dart'
+    if (dart.library.html) 'net_web.dart';
 
 class NetResponse {
   final int statusCode;
@@ -29,7 +31,12 @@ class NetResponse {
 class NetException implements Exception {
   final String message;
   final String technicalDetail;
-  const NetException(this.message, {this.technicalDetail = ''});
+
+  /// The server's machine-readable error code (e.g. GoTrue's
+  /// `email_not_confirmed`), when it sent one.
+  final String? code;
+
+  const NetException(this.message, {this.technicalDetail = '', this.code});
   @override
   String toString() => technicalDetail.isEmpty
       ? 'NetException: $message'

@@ -560,6 +560,14 @@ class AppState extends ChangeNotifier {
     _pendingEmail = mail.trim();
   }
 
+  /// For an account that exists but never confirmed its email (sign-in
+  /// came back `email_not_confirmed`): sends a fresh code and lets
+  /// [confirmSignup] finish it, same as a brand-new signup.
+  Future<void> resumeUnconfirmedSignup(String mail) async {
+    _pendingEmail = mail.trim();
+    await Backend.resendSignupCode(_pendingEmail!);
+  }
+
   /// Re-sends the code for an in-progress signup (e.g. the first one
   /// expired or never arrived).
   Future<void> resendSignupCode() {
@@ -586,29 +594,69 @@ class AppState extends ChangeNotifier {
     unawaited(_finishSigningIn());
   }
 
-  // -------------------------------------------------------- Google sign-in
+  // ------------------------------------------------------- password reset
 
-  /// Redirects the browser to Google's consent screen — Supabase itself
-  /// brokers the whole OAuth2 exchange (state, PKCE, talking to Google),
-  /// so there's nothing to store beforehand. [redirectUrl] must be on the
-  /// project's Auth > URL Configuration allow-list. Throws [NetException]
-  /// if Google isn't configured yet, so the caller can show a friendly
-  /// message instead of redirecting into a raw JSON error page.
-  Future<void> startGoogleSignIn(String redirectUrl) async {
-    if (!await Backend.isGoogleSignInEnabled()) {
-      throw const NetException('ورود با گوگل هنوز روی سرور تنظیم نشده است.');
+  String? _resetEmail;
+
+  /// True after signing in through a password-reset email's link rather
+  /// than its code — SplashPage sends the user to set a new password
+  /// instead of straight into the app.
+  bool pendingPasswordReset = false;
+
+  /// Step 1: emails a reset code to [mail].
+  Future<void> beginPasswordReset(String mail, {String? captchaToken}) async {
+    await Backend.recoverPassword(mail.trim(), captchaToken: captchaToken);
+    _resetEmail = mail.trim();
+  }
+
+  /// Step 2: the emailed code signs the user in (without their old
+  /// password), ready for [setNewPassword].
+  Future<void> confirmPasswordReset(String code) async {
+    final pending = _resetEmail;
+    if (pending == null) {
+      throw StateError('confirmPasswordReset called with no reset in progress');
     }
-    WebNav.redirectTo(Backend.googleAuthUrl(redirectUrl));
+    final session = await Backend.confirmRecovery(pending, code);
+    _resetEmail = null;
+    _adoptSession(session);
+    notifyListeners();
+    unawaited(_finishSigningIn());
+  }
+
+  /// Step 3: sets the new password on the now-signed-in account.
+  Future<void> setNewPassword(String password) async {
+    final token = _authToken;
+    if (token == null) {
+      throw const NetException('برای تغییر رمز ابتدا وارد شوید.');
+    }
+    await Backend.updatePassword(token, password);
+    pendingPasswordReset = false;
+  }
+
+  // ----------------------------------------------- Apple / Google sign-in
+
+  /// Redirects the browser to [provider]'s sign-in (`apple`, `google`) —
+  /// Supabase itself brokers the whole OAuth exchange, so there's nothing
+  /// to store beforehand. [redirectUrl] must be on the project's Auth > URL
+  /// Configuration allow-list. Throws [NetException] if the provider isn't
+  /// switched on yet, so the caller can show a friendly message instead of
+  /// redirecting into a raw JSON error page.
+  Future<void> startOAuthSignIn(String provider, String redirectUrl) async {
+    if (!(await Backend.enabledProviders()).contains(provider)) {
+      throw const NetException('این روش ورود هنوز روی سرور فعال نشده است.');
+    }
+    WebNav.redirectTo(Backend.oauthUrl(provider, redirectUrl));
   }
 
   /// Called once at boot (see SplashPage._go). A no-op unless the URL
-  /// fragment is Supabase's redirect back from [startGoogleSignIn]
-  /// (`#access_token=...&refresh_token=...`). Returns true if it signed
-  /// someone in.
+  /// fragment is Supabase's redirect back from [startOAuthSignIn], or from
+  /// a password-reset email's link (`#access_token=...&refresh_token=...`).
+  /// Returns true if it signed someone in.
   Future<bool> completeOAuthRedirectIfPresent() async {
     if (!WebNav.hasOAuthCallback) return false;
     final accessToken = WebNav.fragmentParam('access_token');
     final refreshTokenValue = WebNav.fragmentParam('refresh_token');
+    final isRecovery = WebNav.fragmentParam('type') == 'recovery';
     WebNav.clearQuery();
     if (accessToken == null || refreshTokenValue == null) {
       AppLog.warn('OAuth redirect ignored: fragment missing tokens');
@@ -634,26 +682,29 @@ class AppState extends ChangeNotifier {
       try {
         final session = await Backend.refresh(refreshTokenValue);
         _adoptSession(session);
+        pendingPasswordReset = isRecovery;
         notifyListeners();
         unawaited(_finishSigningIn().then((_) {
           // The `handle_new_user` trigger only knows about `display_name`
-          // (what password signup sends) — Google's own name lands in
-          // metadata under a different key. Applied after the background
-          // sync rather than gating navigation on it; whichever name was
-          // already on the profile shows first and this corrects it a
-          // moment later, same as `_finishSigningIn`'s own fields do.
-          final googleName = (session.metadata['full_name'] ??
+          // (what password signup sends) — Google's (and sometimes
+          // Apple's) name lands in metadata under a different key.
+          // Applied after the background sync rather than gating
+          // navigation on it; whichever name was already on the profile
+          // shows first and this corrects it a moment later, same as
+          // `_finishSigningIn`'s own fields do. Apple usually shares no
+          // name at all, in which case the profile keeps its default.
+          final providerName = (session.metadata['full_name'] ??
               session.metadata['name']) as String?;
-          if (googleName != null && googleName.isNotEmpty) {
-            displayName = googleName;
-            _pushProfileFields({'display_name': googleName});
+          if (providerName != null && providerName.isNotEmpty) {
+            displayName = providerName;
+            _pushProfileFields({'display_name': providerName});
             notifyListeners();
           }
         }));
         return true;
       } on NetException catch (e) {
         if (attempt >= 3) {
-          AppLog.error('Google sign-in failed to complete', error: e);
+          AppLog.error('OAuth sign-in failed to complete', error: e);
           return false;
         }
         await Future<void>.delayed(Duration(milliseconds: 500 * (attempt + 1)));
