@@ -258,6 +258,18 @@ void main() {
     expect(appState.reviewCleanRecalls[key], 3);
   });
 
+  group('display name', () {
+    test('saves a trimmed name', () {
+      appState.setDisplayName('  Sara  ');
+      expect(appState.displayName, 'Sara');
+    });
+
+    test('ignores an empty name instead of blanking the profile', () {
+      appState.setDisplayName('   ');
+      expect(appState.displayName, 'Learner');
+    });
+  });
+
   group('today counters and quests', () {
     test('minutesToday is 0 when the last session was not today', () {
       appState.currentStreak = 5;

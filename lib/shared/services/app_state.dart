@@ -722,6 +722,16 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// The name shown around the app, editable from Profile.
+  void setDisplayName(String name) {
+    final n = name.trim();
+    if (n.isEmpty || n == displayName) return;
+    displayName = n;
+    notifyListeners();
+    _persistSnapshot();
+    _pushProfileFields({'display_name': n});
+  }
+
   void setGoal(String goal, int minutes) {
     learningGoal = goal;
     dailyGoalMinutes = minutes;

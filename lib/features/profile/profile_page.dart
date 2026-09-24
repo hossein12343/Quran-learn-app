@@ -94,6 +94,12 @@ class ProfilePage extends StatelessWidget {
                               ],
                             ),
                           ),
+                          IconButton(
+                            tooltip: 'ویرایش نام',
+                            icon: const Icon(Icons.edit_outlined,
+                                color: Colors.white70),
+                            onPressed: () => _editName(context),
+                          ),
                         ],
                       ),
                     ),
@@ -280,6 +286,39 @@ class ProfilePage extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  /// Signing in with Apple usually shares no name, so without this those
+  /// accounts would stay "دانش‌آموز" forever.
+  Future<void> _editName(BuildContext context) async {
+    final controller = TextEditingController(text: appState.displayName);
+    final name = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('نام شما'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          autofillHints: const [AutofillHints.name],
+          textInputAction: TextInputAction.done,
+          onSubmitted: (v) => Navigator.pop(ctx, v),
+          decoration: const InputDecoration(
+              hintText: 'نامی که در برنامه نمایش داده شود'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('انصراف'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, controller.text),
+            child: const Text('ذخیره'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (name != null) appState.setDisplayName(name);
   }
 
   Widget _proBanner(BuildContext context) {
