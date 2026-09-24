@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_web_plugins/url_strategy.dart';
+import 'core/motion/browser_back.dart';
 import 'core/motion/page_transitions.dart';
 import 'core/theme/app_theme.dart';
 import 'features/auth/auth_pages.dart';
@@ -176,6 +177,9 @@ void main() {
   // Picks up right away if the restored settings are already anchored to a
   // prayer, instead of waiting up to a minute for the first timer tick.
   unawaited(resolvePrayerAnchoredReminderTime());
+  // Registered before runApp so it runs ahead of the navigator's own back
+  // handling — see BrowserBackHandler.
+  WidgetsBinding.instance.addObserver(BrowserBackHandler(appNavigatorKey));
   runApp(const QuranLearnApp());
 }
 
@@ -244,6 +248,7 @@ class QuranLearnApp extends StatelessWidget {
           theme: AppTheme.light(),
           darkTheme: AppTheme.dark(),
           themeMode: appState.darkMode ? ThemeMode.dark : ThemeMode.light,
+          navigatorKey: appNavigatorKey,
           navigatorObservers: [_routeLogger],
           // Follows `settings.language` now rather than always forcing
           // RTL — Persian (the default) is still RTL, but picking English

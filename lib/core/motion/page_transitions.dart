@@ -1,5 +1,30 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/gestures.dart';
+import 'package:flutter/material.dart';
+
+const _rtlLanguages = {'fa', 'ar', 'he', 'ur', 'ps', 'ckb', 'ku', 'sd', 'yi'};
+
+/// Which way pages slide and swipe back: the phone's own direction, not
+/// the app's. The app is Persian (right-to-left), but it runs inside
+/// Safari, whose own back swipe follows the phone's language — on an
+/// English iPhone, in from the left edge, moving right. When the app slid
+/// the other way, the swipe people reached for was Safari's, which goes
+/// back through browser history instead of the app.
+TextDirection navigationDirection() {
+  final lang = WidgetsBinding.instance.platformDispatcher.locale.languageCode;
+  return _rtlLanguages.contains(lang) ? TextDirection.rtl : TextDirection.ltr;
+}
+
+/// Page motion runs in [navigationDirection]; the page itself keeps the
+/// app's own layout direction.
+Widget _inNavigationDirection(BuildContext context,
+    Widget Function(Widget content) motion, Widget content) {
+  final appDirection = Directionality.of(context);
+  return Directionality(
+    textDirection: navigationDirection(),
+    child: motion(Directionality(textDirection: appDirection, child: content)),
+  );
+}
 
 /// The iOS page slide on every platform, plus a swipe-back that works from
 /// anywhere on the page (as in iOS 26), not only from a thin strip at the
@@ -7,8 +32,7 @@ import 'package:flutter/gestures.dart';
 ///
 /// Flutter's own back swipe only listens within 20px of the edge, which is
 /// especially bad on the web: in Safari the left edge belongs to the
-/// browser's own back swipe, and in this right-to-left app Flutter's strip
-/// is on the right edge, where nobody looks for it.
+/// browser's own back swipe.
 class SwipeBackPageTransitionsBuilder extends CupertinoPageTransitionsBuilder {
   const SwipeBackPageTransitionsBuilder();
 
@@ -20,8 +44,12 @@ class SwipeBackPageTransitionsBuilder extends CupertinoPageTransitionsBuilder {
     Animation<double> secondaryAnimation,
     Widget child,
   ) {
-    return super.buildTransitions<T>(route, context, animation,
-        secondaryAnimation, _SwipeBack<T>(route: route, child: child));
+    return _inNavigationDirection(
+      context,
+      (content) => super.buildTransitions<T>(route, context, animation,
+          secondaryAnimation, _SwipeBack<T>(route: route, child: content)),
+      child,
+    );
   }
 }
 
@@ -30,32 +58,43 @@ class SwipeBackPageTransitionsBuilder extends CupertinoPageTransitionsBuilder {
 /// way an iPhone app moves from its launch screen to its first screen. A
 /// sideways slide says "you went one level deeper", which these aren't —
 /// it's what made landing on Home after Google sign-in look off.
-class RootRoute<T> extends PageRouteBuilder<T> {
-  RootRoute({required WidgetBuilder builder, super.settings})
-      : super(
-          transitionDuration: const Duration(milliseconds: 420),
-          reverseTransitionDuration: const Duration(milliseconds: 300),
-          pageBuilder: (context, _, __) => builder(context),
-          transitionsBuilder: (context, animation, secondaryAnimation, child) {
-            final curved = CurvedAnimation(
-                parent: animation, curve: const Cubic(0.32, 0.72, 0, 1));
-            return FadeTransition(
-              opacity: curved,
-              child: ScaleTransition(
-                scale: Tween<double>(begin: 0.97, end: 1).animate(curved),
-                // When a page is opened on top, this screen still drifts
-                // aside underneath it the iOS way (and follows the finger
-                // on swipe-back) — only its own arrival is a fade.
-                child: CupertinoPageTransition(
-                  primaryRouteAnimation: kAlwaysCompleteAnimation,
-                  secondaryRouteAnimation: secondaryAnimation,
-                  linearTransition: false,
-                  child: child,
-                ),
-              ),
-            );
-          },
-        );
+///
+/// Built on [MaterialPageRoute] on purpose. The first version used a plain
+/// `PageRouteBuilder`, and with it the screen underneath a page never got
+/// drawn during a swipe-back: dragging a page off Home showed blank white
+/// where Home should be (measured: 77% of the uncovered area, against 1%
+/// with a MaterialPageRoute). Only this route's own arrival is replaced;
+/// everything that happens while a page sits on top of it stays standard.
+class RootRoute<T> extends MaterialPageRoute<T> {
+  RootRoute({required super.builder, super.settings});
+
+  @override
+  Duration get transitionDuration => const Duration(milliseconds: 420);
+
+  @override
+  Duration get reverseTransitionDuration => const Duration(milliseconds: 300);
+
+  @override
+  Widget buildTransitions(
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+    Widget child,
+  ) {
+    final curved = CurvedAnimation(
+        parent: animation, curve: const Cubic(0.32, 0.72, 0, 1));
+    return FadeTransition(
+      opacity: curved,
+      child: ScaleTransition(
+        scale: Tween<double>(begin: 0.97, end: 1).animate(curved),
+        // The standard transition, with this screen already fully in place:
+        // when a page opens on top, this one still drifts aside underneath
+        // it the iOS way and follows the finger on swipe-back.
+        child: super.buildTransitions(
+            context, kAlwaysCompleteAnimation, secondaryAnimation, child),
+      ),
+    );
+  }
 }
 
 class _SwipeBack<T> extends StatefulWidget {
