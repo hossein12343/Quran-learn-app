@@ -79,58 +79,73 @@ class _MainShellState extends State<MainShell> {
       animation: appState,
       builder: (context, _) {
         if (isIPhone) _syncDock(context);
-        return Scaffold(
-          // Lets the pages run all the way down behind the floating dock,
-          // which is what its glass then blurs.
-          extendBody: isIPhone,
-          body: NotificationListener<UserScrollNotification>(
-            onNotification: (n) {
-              if (!isIPhone) return false;
-              final collapse = n.direction == ScrollDirection.reverse;
-              final expand = n.direction == ScrollDirection.forward;
-              if (collapse && !_navCollapsed) {
-                setState(() => _navCollapsed = true);
-              } else if (expand && _navCollapsed) {
-                setState(() => _navCollapsed = false);
-              }
-              return false;
-            },
-            child: IndexedStack(
-              index: _index,
-              children: [
-                _opened.contains(0)
-                    ? HomePage(onGoToLearn: () => _goTo(1))
-                    : const SizedBox.shrink(),
-                _opened.contains(1)
-                    ? const LearnPage()
-                    : const SizedBox.shrink(),
-                _opened.contains(2)
-                    ? const PracticePage()
-                    : const SizedBox.shrink(),
-                _opened.contains(3)
-                    ? const QuranPage()
-                    : const SizedBox.shrink(),
-                _opened.contains(4)
-                    ? const ProgressPage()
-                    : const SizedBox.shrink(),
-                _opened.contains(5)
-                    ? const ProfilePage()
-                    : const SizedBox.shrink(),
-              ],
+        // This is the bottom of the app's navigation stack, so a "back"
+        // here has nowhere inside the app to go. Left alone, Flutter hands
+        // it to the browser, which leaves the site entirely — the "back
+        // button crashes the app" report, and exactly what Safari's own
+        // left-edge swipe triggers. Instead, back from another tab returns
+        // to Home, and back on Home does nothing.
+        return PopScope(
+          canPop: false,
+          onPopInvokedWithResult: (didPop, _) {
+            if (!didPop && _index != 0) _goTo(0);
+          },
+          child: Scaffold(
+            // Lets the pages run all the way down behind the floating dock,
+            // which is what its glass then blurs.
+            extendBody: isIPhone,
+            body: NotificationListener<UserScrollNotification>(
+              onNotification: (n) {
+                if (!isIPhone) return false;
+                final collapse = n.direction == ScrollDirection.reverse;
+                final expand = n.direction == ScrollDirection.forward;
+                if (collapse && !_navCollapsed) {
+                  setState(() => _navCollapsed = true);
+                } else if (expand && _navCollapsed) {
+                  setState(() => _navCollapsed = false);
+                }
+                return false;
+              },
+              child: IndexedStack(
+                index: _index,
+                children: [
+                  for (var i = 0; i < _items.length; i++)
+                    // IndexedStack hides the other tabs but keeps their
+                    // animations ticking, and on the web any running
+                    // animation makes Flutter redraw the entire screen every
+                    // frame — the mascot on Home alone kept the app redrawing
+                    // nonstop from every tab.
+                    TickerMode(
+                      enabled: i == _index,
+                      child: _opened.contains(i)
+                          ? _page(i)
+                          : const SizedBox.shrink(),
+                    ),
+                ],
+              ),
             ),
+            bottomNavigationBar: isIPhone
+                // Paints nothing — only reserves the dock's footprint so
+                // SnackBars and FABs still land above it.
+                ? const SafeArea(
+                    top: false,
+                    child: SizedBox(height: _dockFootprint),
+                  )
+                : _flatNavBar(context),
           ),
-          bottomNavigationBar: isIPhone
-              // Paints nothing — only reserves the dock's footprint so
-              // SnackBars and FABs still land above it.
-              ? const SafeArea(
-                  top: false,
-                  child: SizedBox(height: _dockFootprint),
-                )
-              : _flatNavBar(context),
         );
       },
     );
   }
+
+  Widget _page(int i) => switch (i) {
+        0 => HomePage(onGoToLearn: () => _goTo(1)),
+        1 => const LearnPage(),
+        2 => const PracticePage(),
+        3 => const QuranPage(),
+        4 => const ProgressPage(),
+        _ => const ProfilePage(),
+      };
 
   void _syncDock(BuildContext context) {
     glassDock.update(

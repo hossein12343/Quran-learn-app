@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../motion/motion.dart';
 import '../theme/app_theme.dart';
@@ -82,12 +84,30 @@ class StartBadge extends StatefulWidget {
 
 class _StartBadgeState extends State<StartBadge>
     with SingleTickerProviderStateMixin {
+  /// Two quick hops every few seconds rather than bouncing nonstop: any
+  /// running animation makes Flutter on the web redraw the whole screen
+  /// every frame, so a badge bouncing forever kept the Learn tab redrawing
+  /// continuously, which is what made it stutter on a phone.
   late final AnimationController _c = AnimationController(
-      vsync: this, duration: const Duration(milliseconds: 900))
-    ..repeat(reverse: true);
+      vsync: this, duration: const Duration(milliseconds: 900));
+  Timer? _next;
+
+  @override
+  void initState() {
+    super.initState();
+    _hop();
+  }
+
+  void _hop() {
+    _c.forward(from: 0);
+    _next = Timer(const Duration(milliseconds: 5000), () {
+      if (mounted) _hop();
+    });
+  }
 
   @override
   void dispose() {
+    _next?.cancel();
     _c.dispose();
     super.dispose();
   }
@@ -97,7 +117,8 @@ class _StartBadgeState extends State<StartBadge>
     return AnimatedBuilder(
       animation: _c,
       builder: (context, child) => Transform.translate(
-        offset: Offset(0, -4 * _c.value),
+        // Two hops per run: |sin| over two half-periods.
+        offset: Offset(0, -5 * math.sin(_c.value * 2 * math.pi).abs()),
         child: child,
       ),
       child: Container(

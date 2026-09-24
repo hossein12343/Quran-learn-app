@@ -39,20 +39,26 @@ class Mascot extends StatefulWidget {
 }
 
 class _MascotState extends State<Mascot> with TickerProviderStateMixin {
+  /// One gentle rise and fall per run (see `_scheduleBob`), not a loop.
+  /// On the web, any running animation makes Flutter redraw the whole
+  /// screen every frame; a mascot bobbing forever kept the app redrawing
+  /// nonstop, which is what made scrolling and page transitions stutter on
+  /// a phone. Only [MascotMood.cheering], a short celebration screen, still
+  /// bounces continuously.
   late final AnimationController _bob = AnimationController(
-      vsync: this, duration: const Duration(milliseconds: 1500))
-    ..repeat(reverse: true);
-  late final AnimationController _blink =
-      AnimationController(vsync: this, duration: const Duration(milliseconds: 160));
+      vsync: this, duration: const Duration(milliseconds: 1600));
+  late final AnimationController _blink = AnimationController(
+      vsync: this, duration: const Duration(milliseconds: 160));
   late final AnimationController _entrance = AnimationController(
       vsync: this,
       duration: Duration(
           milliseconds: widget.mood == MascotMood.cheering ? 750 : 550));
-  late final AnimationController _burst =
-      AnimationController(vsync: this, duration: const Duration(milliseconds: 700));
+  late final AnimationController _burst = AnimationController(
+      vsync: this, duration: const Duration(milliseconds: 700));
   late final List<_Sparkle> _sparkles =
       List.generate(9, (_) => _Sparkle(math.Random()));
   Timer? _blinkTimer;
+  Timer? _bobTimer;
 
   bool get _celebratory =>
       widget.mood == MascotMood.cheering || widget.mood == MascotMood.happy;
@@ -63,11 +69,31 @@ class _MascotState extends State<Mascot> with TickerProviderStateMixin {
     _entrance.forward();
     if (_celebratory) _burst.forward();
     _scheduleBlink();
+    _startBob();
+  }
+
+  void _startBob() {
+    _bobTimer?.cancel();
+    if (widget.mood == MascotMood.cheering) {
+      _bob.repeat();
+      return;
+    }
+    _bob.forward(from: 0);
+    _scheduleBob();
+  }
+
+  void _scheduleBob() {
+    _bobTimer =
+        Timer(Duration(milliseconds: 9000 + math.Random().nextInt(5000)), () {
+      if (!mounted) return;
+      _bob.forward(from: 0);
+      _scheduleBob();
+    });
   }
 
   void _scheduleBlink() {
-    _blinkTimer = Timer(
-        Duration(milliseconds: 2200 + math.Random().nextInt(2600)), () {
+    _blinkTimer =
+        Timer(Duration(milliseconds: 3500 + math.Random().nextInt(3500)), () {
       if (!mounted) return;
       _blink.forward(from: 0).then((_) {
         if (mounted) _blink.reverse();
@@ -82,10 +108,11 @@ class _MascotState extends State<Mascot> with TickerProviderStateMixin {
     // A mood change is a little "reaction" — replay the pop-in so a fresh
     // expression actually reads as a response, not a silent swap.
     if (old.mood != widget.mood) {
-      _entrance.duration =
-          Duration(milliseconds: widget.mood == MascotMood.cheering ? 750 : 550);
+      _entrance.duration = Duration(
+          milliseconds: widget.mood == MascotMood.cheering ? 750 : 550);
       _entrance.forward(from: 0);
       if (_celebratory) _burst.forward(from: 0);
+      _startBob();
     }
   }
 
@@ -96,6 +123,7 @@ class _MascotState extends State<Mascot> with TickerProviderStateMixin {
     _entrance.dispose();
     _burst.dispose();
     _blinkTimer?.cancel();
+    _bobTimer?.cancel();
     super.dispose();
   }
 
@@ -140,9 +168,12 @@ class _MascotState extends State<Mascot> with TickerProviderStateMixin {
             builder: (context, child) {
               final pop = reduced
                   ? 1.0
-                  : Curves.elasticOut.transform(_entrance.value.clamp(0.0, 1.0));
+                  : Curves.elasticOut
+                      .transform(_entrance.value.clamp(0.0, 1.0));
               final spin = !reduced && cheer
-                  ? (1 - Curves.easeOutCubic.transform(_entrance.value.clamp(0.0, 1.0))) *
+                  ? (1 -
+                          Curves.easeOutCubic
+                              .transform(_entrance.value.clamp(0.0, 1.0))) *
                       math.pi *
                       2
                   : 0.0;
@@ -151,16 +182,17 @@ class _MascotState extends State<Mascot> with TickerProviderStateMixin {
                   : math.sin(_bob.value * math.pi) * bounce;
               final tilt = widget.mood == MascotMood.sad ? 0.05 : 0.0;
               return Transform.translate(
-                offset: Offset(0, -bob + (widget.mood == MascotMood.sad ? 3 : 0)),
+                offset:
+                    Offset(0, -bob + (widget.mood == MascotMood.sad ? 3 : 0)),
                 child: Transform.rotate(
                   angle: tilt + spin,
                   child: Transform.scale(scale: pop, child: child),
                 ),
               );
             },
-            // `_bob` (the idle up/down float) repeats forever for as long
-            // as this widget is mounted — and it stays mounted, animating,
-            // even off-screen, since every tab lives inside `MainShell`'s
+            // `_bob` (the idle up/down float) used to repeat forever for as
+            // long as this widget was mounted — and it stays mounted even
+            // off-screen, since every tab lives inside `MainShell`'s
             // `IndexedStack` (`main_shell.dart`) rather than being torn
             // down. Without a `RepaintBoundary` here, every one of those
             // ticks re-runs `_MascotPainter.paint()` — a `Path.combine`
@@ -185,7 +217,8 @@ class _MascotState extends State<Mascot> with TickerProviderStateMixin {
                 child: AnimatedBuilder(
                   animation: _blink,
                   builder: (context, _) => CustomPaint(
-                    painter: _MascotPainter(mood: widget.mood, blink: _blink.value),
+                    painter:
+                        _MascotPainter(mood: widget.mood, blink: _blink.value),
                   ),
                 ),
               ),
@@ -221,7 +254,10 @@ class _SparklePainter extends CustomPainter {
   final bool big;
   final Color color;
   _SparklePainter(
-      {required this.sparkles, required this.t, required this.big, required this.color});
+      {required this.sparkles,
+      required this.t,
+      required this.big,
+      required this.color});
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -234,9 +270,10 @@ class _SparklePainter extends CustomPainter {
     if (opacity <= 0) return;
     for (final s in sparkles) {
       final dist = maxR * s.distance * travel;
-      final pos = center +
-          Offset(math.cos(s.angle) * dist, math.sin(s.angle) * dist);
-      final paint = Paint()..color = color.withValues(alpha: opacity.clamp(0.0, 1.0));
+      final pos =
+          center + Offset(math.cos(s.angle) * dist, math.sin(s.angle) * dist);
+      final paint = Paint()
+        ..color = color.withValues(alpha: opacity.clamp(0.0, 1.0));
       final sz = s.size * (big ? 1.3 : 1.0);
       if (s.star) {
         _tinyStar(canvas, pos, sz, paint);
@@ -251,7 +288,8 @@ class _SparklePainter extends CustomPainter {
     for (var i = 0; i < 8; i++) {
       final radius = i.isEven ? r : r * 0.4;
       final angle = math.pi / 4 * i;
-      final p = Offset(c.dx + radius * math.cos(angle), c.dy + radius * math.sin(angle));
+      final p = Offset(
+          c.dx + radius * math.cos(angle), c.dy + radius * math.sin(angle));
       if (i == 0) {
         path.moveTo(p.dx, p.dy);
       } else {
@@ -285,7 +323,8 @@ class _MascotPainter extends CustomPainter {
       Path()..addOval(Rect.fromCircle(center: moonCenter, radius: moonR)),
       Path()
         ..addOval(Rect.fromCircle(
-            center: Offset(moonCenter.dx + moonR * 0.55, moonCenter.dy - moonR * 0.32),
+            center: Offset(
+                moonCenter.dx + moonR * 0.55, moonCenter.dy - moonR * 0.32),
             radius: moonR * 0.86)),
     );
     canvas.drawPath(moon, Paint()..color = AppColors.gold);
@@ -360,7 +399,9 @@ class _MascotPainter extends CustomPainter {
         for (final dx in [-eyeDx, eyeDx]) {
           canvas.drawOval(
             Rect.fromCenter(
-                center: Offset(center.dx + dx, eyeY), width: r * 0.19, height: h),
+                center: Offset(center.dx + dx, eyeY),
+                width: r * 0.19,
+                height: h),
             eyePaint,
           );
         }

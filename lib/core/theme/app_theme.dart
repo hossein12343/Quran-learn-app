@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../motion/page_transitions.dart';
 
 /// "Manuscript" palette (2026-09-04 redesign) — kept Duolingo's *mechanics*
 /// (flat shapes, depth built from a solid "shadow" colour under each raised
@@ -235,6 +236,10 @@ class AppTheme {
       scaffoldBackgroundColor: background,
       splashFactory: NoSplash.splashFactory,
       highlightColor: Colors.transparent,
+      pageTransitionsTheme: PageTransitionsTheme(builders: {
+        for (final platform in TargetPlatform.values)
+          platform: const SwipeBackPageTransitionsBuilder(),
+      }),
       // `outline`/`onSurfaceVariant` are the canonical home for anything
       // that used to be a hardcoded `AppColors.grey300`/`grey400` — card
       // borders, dividers, muted/disabled icons. Those raw constants are
