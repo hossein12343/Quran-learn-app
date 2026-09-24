@@ -1,12 +1,33 @@
+import 'dart:async';
 import 'dart:math' as math;
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 
 bool _reduced(BuildContext c) =>
     MediaQuery.maybeOf(c)?.disableAnimations ?? false;
 
-/// Content fades and rises as it enters the viewport. Lists build their
-/// children lazily, so placing this inside a builder fires it on scroll.
+/// The app's shared timing. Short, front-loaded motion that settles softly,
+/// the way current iOS reads, rather than long uniform ease-outs.
+abstract final class Motion {
+  static const press = Duration(milliseconds: 70);
+  static const release = Duration(milliseconds: 260);
+  static const enter = Duration(milliseconds: 340);
+
+  /// Apple's standard easing: moves most of the way almost at once, then
+  /// takes its time on the last few pixels.
+  static const smooth = Cubic(0.32, 0.72, 0, 1);
+
+  /// Settles with a small overshoot, like a stiff spring. Only for values
+  /// that can safely overshoot (scale), never for padding or sizes.
+  static const spring = Cubic(0.34, 1.45, 0.64, 1);
+}
+
+/// Content fades, rises and firms up as a screen opens.
+///
+/// Only when the screen opens: a row built because the user is scrolling
+/// shows up immediately, like a native list. Lazily-built list rows used to
+/// each float in over half a second while you scrolled.
 class Reveal extends StatefulWidget {
   final Widget child;
   final int index;
@@ -16,7 +37,7 @@ class Reveal extends StatefulWidget {
     super.key,
     required this.child,
     this.index = 0,
-    this.distance = 26,
+    this.distance = 12,
   });
 
   @override
@@ -24,16 +45,27 @@ class Reveal extends StatefulWidget {
 }
 
 class _RevealState extends State<Reveal> with SingleTickerProviderStateMixin {
-  late final AnimationController _c = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 560),
-  );
+  late final AnimationController _c =
+      AnimationController(vsync: this, duration: Motion.enter);
+  late final Animation<double> _a =
+      CurvedAnimation(parent: _c, curve: Motion.smooth);
+  Timer? _delay;
 
   @override
   void initState() {
     super.initState();
-    Future<void>.delayed(
-      Duration(milliseconds: 60 * (widget.index % 7)),
+    final scrolling = context
+            .findAncestorStateOfType<ScrollableState>()
+            ?.position
+            .isScrollingNotifier
+            .value ??
+        false;
+    if (scrolling) {
+      _c.value = 1;
+      return;
+    }
+    _delay = Timer(
+      Duration(milliseconds: 30 * math.min(widget.index, 6)),
       () {
         if (mounted) _c.forward();
       },
@@ -42,6 +74,7 @@ class _RevealState extends State<Reveal> with SingleTickerProviderStateMixin {
 
   @override
   void dispose() {
+    _delay?.cancel();
     _c.dispose();
     super.dispose();
   }
@@ -49,103 +82,121 @@ class _RevealState extends State<Reveal> with SingleTickerProviderStateMixin {
   @override
   Widget build(BuildContext context) {
     if (_reduced(context)) return widget.child;
-    final a = CurvedAnimation(parent: _c, curve: Curves.easeOutCubic);
-    return AnimatedBuilder(
-      animation: a,
-      builder: (context, child) => Opacity(
-        opacity: a.value,
-        child: Transform.translate(
-          offset: Offset(0, widget.distance * (1 - a.value)),
-          child: child,
-        ),
+    return FadeTransition(
+      opacity: _a,
+      child: AnimatedBuilder(
+        animation: _a,
+        builder: (context, child) {
+          final t = 1 - _a.value;
+          return Transform.translate(
+            offset: Offset(0, widget.distance * t),
+            child: Transform.scale(scale: 1 - 0.03 * t, child: child),
+          );
+        },
+        child: widget.child,
       ),
-      child: widget.child,
     );
   }
 }
 
-/// Fires a quick expanding, fading ring at [globalPosition] — the little
-/// "pop" of feedback on a tap or a click, so a press always lands with
-/// something visible even when the target itself barely moves. No-op if
-/// there's no [Overlay] in scope.
-void showTapBurst(BuildContext context, Offset globalPosition, {Color? color}) {
-  final overlay = Overlay.maybeOf(context);
-  if (overlay == null) return;
-  final tint = color ?? AppColors.primary;
-  late final OverlayEntry entry;
-  entry = OverlayEntry(
-    builder: (_) => Positioned(
-      left: globalPosition.dx - 26,
-      top: globalPosition.dy - 26,
-      child: IgnorePointer(
-        child: _BurstRing(color: tint, onDone: entry.remove),
-      ),
-    ),
-  );
-  overlay.insert(entry);
-}
+/// Tracks press and hover for any tappable surface and hands them to
+/// [builder].
+///
+/// The pressed state comes from raw pointer events, so it shows the instant
+/// a finger lands. `GestureDetector.onTapDown` holds that back for up to
+/// 100ms inside anything scrollable, in case the touch becomes a scroll,
+/// and on a quick tap it fires down and up in the same frame, so the press
+/// never visibly happened. The tap action itself still goes through
+/// [GestureDetector.onTap], so a drag that turns into a scroll never
+/// triggers it.
+class PressDetector extends StatefulWidget {
+  final VoidCallback? onTap;
+  final Widget Function(BuildContext context, bool pressed, bool hovered)
+      builder;
 
-class _BurstRing extends StatefulWidget {
-  final Color color;
-  final VoidCallback onDone;
-  const _BurstRing({required this.color, required this.onDone});
+  const PressDetector({super.key, required this.onTap, required this.builder});
 
   @override
-  State<_BurstRing> createState() => _BurstRingState();
+  State<PressDetector> createState() => _PressDetectorState();
 }
 
-class _BurstRingState extends State<_BurstRing>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _c = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 360),
-  )..forward().whenComplete(widget.onDone);
+class _PressDetectorState extends State<PressDetector> {
+  /// Long enough that even a very quick tap visibly presses in.
+  static const _minPress = Duration(milliseconds: 90);
+
+  bool _pressed = false;
+  bool _hovered = false;
+  Offset? _origin;
+  final _held = Stopwatch();
+  Timer? _release;
+
+  void _setPressed(bool v) {
+    if (_pressed != v && mounted) setState(() => _pressed = v);
+  }
+
+  void _down(PointerDownEvent e) {
+    if (e.kind == PointerDeviceKind.mouse && e.buttons != kPrimaryMouseButton) {
+      return;
+    }
+    _release?.cancel();
+    _origin = e.position;
+    _held
+      ..reset()
+      ..start();
+    _setPressed(true);
+  }
+
+  void _move(PointerMoveEvent e) {
+    final origin = _origin;
+    if (origin != null && (e.position - origin).distance > kTouchSlop) _up();
+  }
+
+  void _up([PointerEvent? _]) {
+    if (_origin == null) return;
+    _origin = null;
+    final remaining = _minPress - _held.elapsed;
+    if (remaining > Duration.zero) {
+      _release = Timer(remaining, () => _setPressed(false));
+    } else {
+      _setPressed(false);
+    }
+  }
 
   @override
   void dispose() {
-    _c.dispose();
+    _release?.cancel();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _c,
-      builder: (context, _) {
-        final t = Curves.easeOut.transform(_c.value);
-        return Opacity(
-          opacity: (1 - t) * 0.5,
-          child: Transform.scale(
-            scale: 0.25 + t * 1.6,
-            child: Container(
-              width: 52,
-              height: 52,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                border: Border.all(color: color, width: 3),
-              ),
-            ),
-          ),
-        );
-      },
+    final on = widget.onTap != null;
+    return MouseRegion(
+      cursor: on ? SystemMouseCursors.click : MouseCursor.defer,
+      onEnter: on ? (_) => setState(() => _hovered = true) : null,
+      onExit: on ? (_) => setState(() => _hovered = false) : null,
+      child: Listener(
+        onPointerDown: on ? _down : null,
+        onPointerMove: on ? _move : null,
+        onPointerUp: on ? _up : null,
+        onPointerCancel: on ? _up : null,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: widget.onTap,
+          child: widget.builder(context, on && _pressed, on && _hovered),
+        ),
+      ),
     );
   }
-
-  Color get color => widget.color;
 }
 
-/// Every tappable surface compresses slightly on press, lifts a touch on
-/// hover (and shows the click cursor), and pops a ring on release. One
-/// tactile signature, defined once, applied everywhere.
-class Pressable extends StatefulWidget {
+/// Every tappable surface compresses the moment it's touched, springs back
+/// on release, and lifts a touch under a mouse cursor. One tactile
+/// signature, defined once, applied everywhere.
+class Pressable extends StatelessWidget {
   final Widget child;
   final VoidCallback? onTap;
   final double scale;
-
-  /// Whether releasing fires a [showTapBurst] ring. Off for surfaces where
-  /// a ring would be noise — a fast run of word-bank taps, say.
-  final bool burst;
-  final Color? burstColor;
 
   /// An accessible name for a screen reader, for the common case where
   /// [child] is a bare icon with no readable text of its own (unlike
@@ -161,53 +212,25 @@ class Pressable extends StatefulWidget {
     super.key,
     required this.child,
     this.onTap,
-    this.scale = 0.965,
-    this.burst = true,
-    this.burstColor,
+    this.scale = 0.96,
     this.semanticLabel,
   });
 
   @override
-  State<Pressable> createState() => _PressableState();
-}
-
-class _PressableState extends State<Pressable> {
-  bool _down = false;
-  bool _hover = false;
-
-  @override
   Widget build(BuildContext context) {
-    final on = widget.onTap != null;
-    Widget result = MouseRegion(
-      cursor: on ? SystemMouseCursors.click : MouseCursor.defer,
-      onEnter: on ? (_) => setState(() => _hover = true) : null,
-      onExit: on ? (_) => setState(() => _hover = false) : null,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTapDown: on ? (_) => setState(() => _down = true) : null,
-        onTapCancel: on ? () => setState(() => _down = false) : null,
-        onTapUp: on
-            ? (d) {
-                setState(() => _down = false);
-                if (widget.burst) {
-                  showTapBurst(context, d.globalPosition,
-                      color: widget.burstColor);
-                }
-              }
-            : null,
-        onTap: widget.onTap,
-        child: AnimatedScale(
-          scale: _down ? widget.scale : (_hover ? 1.012 : 1.0),
-          duration: const Duration(milliseconds: 150),
-          curve: _down ? Curves.easeOut : Curves.easeOutBack,
-          child: widget.child,
-        ),
+    Widget result = PressDetector(
+      onTap: onTap,
+      builder: (context, pressed, hovered) => AnimatedScale(
+        scale: pressed ? scale : (hovered ? 1.012 : 1.0),
+        duration: pressed ? Motion.press : Motion.release,
+        curve: pressed ? Curves.easeOut : Motion.spring,
+        child: child,
       ),
     );
-    if (widget.semanticLabel != null) {
+    if (semanticLabel != null) {
       result = Semantics(
         button: true,
-        label: widget.semanticLabel,
+        label: semanticLabel,
         child: ExcludeSemantics(child: result),
       );
     }
@@ -272,8 +295,8 @@ class CountUp extends StatelessWidget {
   Widget build(BuildContext context) {
     return TweenAnimationBuilder<double>(
       tween: Tween<double>(begin: 0, end: value.toDouble()),
-      duration: const Duration(milliseconds: 1000),
-      curve: Curves.easeOutCubic,
+      duration: const Duration(milliseconds: 700),
+      curve: Motion.smooth,
       builder: (context, v, _) => Text('${v.round()}', style: style),
     );
   }
@@ -312,8 +335,8 @@ class ProgressRing extends StatelessWidget {
       height: size,
       child: TweenAnimationBuilder<double>(
         tween: Tween<double>(begin: 0, end: progress.clamp(0.0, 1.0)),
-        duration: const Duration(milliseconds: 850),
-        curve: Curves.easeOutCubic,
+        duration: const Duration(milliseconds: 700),
+        curve: Motion.smooth,
         builder: (context, v, _) => CustomPaint(
           painter: _RingPainter(v, stroke, color, resolvedTrack),
           child: Center(child: center),

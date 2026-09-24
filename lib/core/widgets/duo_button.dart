@@ -37,11 +37,11 @@ class DuoButton extends StatefulWidget {
 }
 
 class _DuoButtonState extends State<DuoButton> {
-  bool _down = false;
-  bool _hover = false;
-
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      PressDetector(onTap: widget.onTap, builder: _build);
+
+  Widget _build(BuildContext context, bool down, bool hover) {
     final enabled = widget.onTap != null;
     // Disabled state used to fall back to hardcoded `AppColors.grey300`/
     // `grey400`/`grey500` — light-mode-only tones that stayed pale cream
@@ -50,7 +50,7 @@ class _DuoButtonState extends State<DuoButton> {
     final baseFace = enabled ? widget.color : context.borderColor;
     // Hover brightens the face a touch and (below) floats it up 2px so it
     // reads as "ready to press" under a cursor.
-    final face = enabled && _hover ? _lighten(baseFace) : baseFace;
+    final face = enabled && hover ? _lighten(baseFace) : baseFace;
     final shadow = enabled
         ? (widget.shadowColor ?? _darken(widget.color))
         : context.mutedColor;
@@ -114,9 +114,9 @@ class _DuoButtonState extends State<DuoButton> {
         // Hover floats the face 2px above rest via the outer translate
         // below; press still slides it down over the shadow via padding.
         AnimatedPadding(
-          duration: const Duration(milliseconds: 80),
-          curve: Curves.easeOut,
-          padding: EdgeInsets.only(top: _down ? widget.depth : 0),
+          duration: down ? Motion.press : const Duration(milliseconds: 180),
+          curve: down ? Curves.easeOut : Motion.smooth,
+          padding: EdgeInsets.only(top: down ? widget.depth : 0),
           child: SizedBox(
             width: widget.fullWidth ? double.infinity : null,
             height: widget.height,
@@ -132,30 +132,12 @@ class _DuoButtonState extends State<DuoButton> {
       ],
     );
 
-    return MouseRegion(
-      cursor: enabled ? SystemMouseCursors.click : MouseCursor.defer,
-      onEnter: enabled ? (_) => setState(() => _hover = true) : null,
-      onExit: enabled ? (_) => setState(() => _hover = false) : null,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTapDown: enabled ? (_) => setState(() => _down = true) : null,
-        onTapCancel: enabled ? () => setState(() => _down = false) : null,
-        onTapUp: enabled
-            ? (d) {
-                setState(() => _down = false);
-                showTapBurst(context, d.globalPosition, color: widget.color);
-                widget.onTap!();
-              }
-            : null,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 140),
-          curve: Curves.easeOutBack,
-          transform: Matrix4.translationValues(
-              0, enabled && _hover && !_down ? -2 : 0, 0),
-          transformAlignment: Alignment.center,
-          child: faceStack,
-        ),
-      ),
+    return AnimatedContainer(
+      duration: Motion.release,
+      curve: Motion.spring,
+      transform: Matrix4.translationValues(0, hover && !down ? -2 : 0, 0),
+      transformAlignment: Alignment.center,
+      child: faceStack,
     );
   }
 
@@ -198,11 +180,11 @@ class DuoTile extends StatefulWidget {
 }
 
 class _DuoTileState extends State<DuoTile> {
-  bool _down = false;
-  bool _hover = false;
-
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      PressDetector(onTap: widget.onTap, builder: _build);
+
+  Widget _build(BuildContext context, bool down, bool hover) {
     final enabled = widget.onTap != null;
     // Both default to theme-aware colors rather than the old hardcoded
     // `AppColors.grey300`/`white` — those never adapted to dark mode, so
@@ -211,48 +193,31 @@ class _DuoTileState extends State<DuoTile> {
     // (e.g. sealed/selected states) by passing one explicitly.
     final fill = widget.fillColor ?? Theme.of(context).colorScheme.surface;
     final border = widget.borderColor ?? context.borderColor;
-    final hovering = enabled && _hover && !_down;
-    return MouseRegion(
-      cursor: enabled ? SystemMouseCursors.click : MouseCursor.defer,
-      onEnter: enabled ? (_) => setState(() => _hover = true) : null,
-      onExit: enabled ? (_) => setState(() => _hover = false) : null,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTapDown: enabled ? (_) => setState(() => _down = true) : null,
-        onTapCancel: enabled ? () => setState(() => _down = false) : null,
-        onTapUp: enabled
-            ? (d) {
-                setState(() => _down = false);
-                showTapBurst(context, d.globalPosition, color: border);
-                widget.onTap!();
-              }
-            : null,
-        child: AnimatedScale(
-          scale: _down ? 0.96 : (hovering ? 1.015 : 1.0),
-          duration: const Duration(milliseconds: 130),
-          curve: _down ? Curves.easeOut : Curves.easeOutBack,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 130),
-            width: widget.stretch ? double.infinity : null,
-            padding: widget.padding,
-            decoration: BoxDecoration(
-              color: fill,
-              borderRadius: BorderRadius.circular(AppRadius.md),
-              border: Border.all(color: border, width: 2.5),
-              boxShadow: [
-                BoxShadow(
-                  color: border.withValues(alpha: 0.5),
-                  // The shadow underline grows a touch on hover, echoing
-                  // DuoButton's lift with a tile that has no "face" to
-                  // actually raise.
-                  offset: Offset(0, hovering ? 4 : 3),
-                  blurRadius: 0,
-                ),
-              ],
+    final hovering = enabled && hover && !down;
+    return AnimatedScale(
+      scale: down ? 0.96 : (hovering ? 1.015 : 1.0),
+      duration: down ? Motion.press : Motion.release,
+      curve: down ? Curves.easeOut : Motion.spring,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 130),
+        width: widget.stretch ? double.infinity : null,
+        padding: widget.padding,
+        decoration: BoxDecoration(
+          color: fill,
+          borderRadius: BorderRadius.circular(AppRadius.md),
+          border: Border.all(color: border, width: 2.5),
+          boxShadow: [
+            BoxShadow(
+              color: border.withValues(alpha: 0.5),
+              // The shadow underline grows a touch on hover, echoing
+              // DuoButton's lift with a tile that has no "face" to
+              // actually raise.
+              offset: Offset(0, hovering ? 4 : 3),
+              blurRadius: 0,
             ),
-            child: widget.child,
-          ),
+          ],
         ),
+        child: widget.child,
       ),
     );
   }

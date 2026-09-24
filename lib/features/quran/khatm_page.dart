@@ -105,7 +105,6 @@ class KhatmPage extends StatelessWidget {
 
   Widget _juzRow(BuildContext context, JuzStart js, bool done) {
     return Pressable(
-      burst: false,
       onTap: () => khatmTracker.toggle(js.juz),
       child: Container(
         padding: const EdgeInsets.all(AppSpacing.lg),
