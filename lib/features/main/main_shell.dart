@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show ScrollDirection;
 import '../../core/theme/app_theme.dart';
 import '../../shared/services/app_state.dart';
+import '../../shared/services/glass_dock.dart';
 import '../../shared/services/platform_info.dart';
 import '../home/home_page.dart';
 import '../learn/learn_page.dart';
@@ -17,6 +18,9 @@ import '../profile/profile_page.dart';
 /// insights, school cap, ...) aren't self-explanatory on their own, and
 /// the label was already being computed and simply not shown.)
 ///
+/// On iPhone the bar is instead a floating Liquid Glass dock drawn by the
+/// browser, not by Flutter — see [GlassDock] for why.
+///
 /// Learn vs Practice is a deliberate split, not a naming quirk: Learn stays
 /// the strict locked/sequential path; Practice is "any surah, any level,
 /// no order, no locks" — see practice_page.dart's doc comment.
@@ -30,22 +34,12 @@ class MainShell extends StatefulWidget {
 class _MainShellState extends State<MainShell> {
   int _index = 0;
 
-  /// True while the glass nav bar is shrunk to its compact, icon-only
-  /// state — real iOS 26 tab bars "shrink to bring focus to the
-  /// content while keeping navigation instantly accessible" while
-  /// scrolling down, then "fluidly expand" back on scrolling up (both
-  /// quoted from Apple's own Liquid Glass announcement). Driven by
+  /// True while the iPhone dock is minimised. iOS 26 tab bars fold into a
+  /// single bubble holding just the current tab while you scroll down,
+  /// and expand again when you scroll back up or tap the bubble. Driven by
   /// [UserScrollNotification], which only fires on an actual direction
-  /// change, not every scroll frame — cheap to listen to, unlike the
-  /// live blur this whole nav bar deliberately avoids elsewhere.
+  /// change, not every scroll frame.
   bool _navCollapsed = false;
-
-  /// True while a mouse cursor is over the floating glass dock — desktop
-  /// browsers only (touch has no hover), gives the dock a real lift/scale
-  /// response the way a cursor approaching the macOS/iPadOS Dock does,
-  /// reinforcing that it's a separate floating layer and not part of the
-  /// page underneath it.
-  bool _dockHovering = false;
 
   /// Every tab keeps its place in the `IndexedStack` once opened — that's
   /// what actually preserves scroll position, matching the class doc
@@ -65,20 +59,29 @@ class _MainShellState extends State<MainShell> {
     _NavItem(Icons.person_rounded, Icons.person_outline, 'پروفایل'),
   ];
 
+  static final _dockItems = [
+    for (final item in _items) GlassDockItem(item.active, item.label),
+  ];
+
+  /// The dock's height plus its gap above the screen edge. Must match
+  /// `.ql-dock`'s `height` and `bottom` in `glass_dock_factory_web.dart`.
+  static const _dockFootprint = 64.0 + 21.0;
+
+  @override
+  void dispose() {
+    glassDock.hide();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
       animation: appState,
       builder: (context, _) {
+        if (isIPhone) _syncDock(context);
         return Scaffold(
-          // On iPhone the dock is its own floating layer over the content,
-          // not a strip the content stops short of — extendBody is
-          // Scaffold's own mechanism for letting body draw underneath
-          // bottomNavigationBar instead of reserving space for it. That's
-          // what actually lets real content scroll behind the dock and
-          // show through its glass, instead of the blur just sampling a
-          // flat edge. The flat (non-iPhone) bar keeps the old, simpler
-          // layout — it was never meant to float.
+          // Lets the pages run all the way down behind the floating dock,
+          // which is what its glass then blurs.
           extendBody: isIPhone,
           body: NotificationListener<UserScrollNotification>(
             onNotification: (n) {
@@ -116,18 +119,35 @@ class _MainShellState extends State<MainShell> {
               ],
             ),
           ),
-          bottomNavigationBar:
-              isIPhone ? _glassNavBar(context) : _flatNavBar(context),
+          bottomNavigationBar: isIPhone
+              // Paints nothing — only reserves the dock's footprint so
+              // SnackBars and FABs still land above it.
+              ? const SafeArea(
+                  top: false,
+                  child: SizedBox(height: _dockFootprint),
+                )
+              : _flatNavBar(context),
         );
       },
     );
   }
 
-  /// The plain bar's indicator used to be static — each tab flipping its
-  /// own top stripe on and off — replaced here with the same sliding,
-  /// single-indicator approach as the glass bar below, just styled as a
-  /// thin coloured bar instead of a translucent pill, matching this
-  /// variant's existing flat look.
+  void _syncDock(BuildContext context) {
+    glassDock.update(
+      items: _dockItems,
+      selected: _index,
+      // The dock sits above the entire Flutter canvas, so left alone it
+      // would cover dialogs, sheets, popup menus and every pushed page.
+      // All of those are routes, so "this route is the top one" is exactly
+      // when it should be showing.
+      visible: ModalRoute.of(context)?.isCurrent ?? true,
+      compact: _navCollapsed,
+      dark: appState.darkMode,
+      rtl: Directionality.of(context) == TextDirection.rtl,
+      onTap: _goTo,
+    );
+  }
+
   Widget _flatNavBar(BuildContext context) {
     final lastIndex = _items.length - 1;
     return Container(
@@ -163,162 +183,10 @@ class _MainShellState extends State<MainShell> {
             Row(
               children: [
                 for (var i = 0; i < _items.length; i++)
-                  Expanded(child: _tab(i, _items[i], showBar: false)),
+                  Expanded(child: _tab(i, _items[i])),
               ],
             ),
           ],
-        ),
-      ),
-    );
-  }
-
-  /// Real `BackdropFilter` blur was tried here twice now — once full-bleed,
-  /// once scoped to only run while the bar was idle (not mid-scroll) — and
-  /// both times came back as genuine, reported lag on the real device. The
-  /// idle-only gate turned out to have a real gap too: [_navCollapsed] only
-  /// goes true while the *content* is being scrolled away from view — a
-  /// scroll in the other direction (revealing earlier content) expands the
-  /// bar again immediately, so the expensive blur was still recomputing
-  /// every frame for that direction's entire scroll, not just briefly. This
-  /// is deliberately not a third attempt at tuning that further — it's the
-  /// same cheap, one-time-cost tinted gradient this bar used before either
-  /// attempt, which is the only version of this that has never lagged.
-  Widget _glassLayer(Color base) {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            base.withValues(alpha: _navCollapsed ? 0.94 : 0.86),
-            base.withValues(alpha: _navCollapsed ? 0.78 : 0.62),
-          ],
-        ),
-      ),
-    );
-  }
-
-  /// The flat bar's static per-tab top stripe is replaced here with one
-  /// glass "pill" that slides and morphs to the newly-selected tab —
-  /// closer to how Apple's own tab bars (Music included) actually
-  /// animate selection, rather than each tab independently flipping its
-  /// own indicator on and off.
-  ///
-  /// Sized and spaced to read as a dock actually floating above the
-  /// content — larger, more rounded, and held well clear of every
-  /// screen edge — rather than a bar stuck flush to the bottom.
-  Widget _glassNavBar(BuildContext context) {
-    final base = Theme.of(context).colorScheme.surface;
-    const radius = 36.0;
-    final lastIndex = _items.length - 1;
-    return SafeArea(
-      top: false,
-      minimum: const EdgeInsets.fromLTRB(26, 0, 26, 30),
-      child: MouseRegion(
-        onEnter: (_) => setState(() => _dockHovering = true),
-        onExit: (_) => setState(() => _dockHovering = false),
-        child: AnimatedScale(
-          // The lift itself: a cursor resting over the dock nudges it
-          // very slightly toward the viewer, on top of the deeper shadow
-          // below — the same "it's floating above you" cue a real macOS
-          // Dock gives on approach, just subtler since this one holds
-          // still rather than magnifying individual icons.
-          scale: _dockHovering ? 1.035 : 1.0,
-          duration: const Duration(milliseconds: 180),
-          curve: Curves.easeOut,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 260),
-            curve: Curves.easeOutCubic,
-            height: _navCollapsed ? 54 : 78,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(radius),
-              border: Border.all(
-                color: Colors.white.withValues(alpha: 0.6),
-                width: 1.2,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black
-                      .withValues(alpha: _dockHovering ? 0.30 : 0.22),
-                  blurRadius: _dockHovering ? 40 : 32,
-                  offset: Offset(0, _dockHovering ? 20 : 16),
-                ),
-              ],
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(radius),
-              child: Stack(
-                children: [
-                  Positioned.fill(child: _glassLayer(base)),
-                  // A thin specular streak near the top edge — a cheap,
-                  // static gradient, not a filter — is what actually sells
-                  // "glass" over "tinted plastic": real glass catches a
-                  // highlight along the edge nearest the light.
-                  Positioned(
-                    left: 0,
-                    right: 0,
-                    top: 0,
-                    height: 1.4,
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [
-                            Colors.white.withValues(alpha: 0),
-                            Colors.white.withValues(alpha: 0.85),
-                            Colors.white.withValues(alpha: 0),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                  AnimatedAlign(
-                    duration: const Duration(milliseconds: 380),
-                    curve: Curves.easeOutBack,
-                    // `AlignmentDirectional`, not `Alignment` — see the flat
-                    // bar's matching comment above; this pill has the exact
-                    // same RTL bug fixed the same way.
-                    alignment:
-                        AlignmentDirectional(_index / lastIndex * 2 - 1, 0),
-                    child: FractionallySizedBox(
-                      widthFactor: 1 / _items.length,
-                      heightFactor: 0.8,
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 6),
-                        child: DecoratedBox(
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(radius - 8),
-                            gradient: LinearGradient(
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                              colors: [
-                                AppColors.primary.withValues(alpha: 0.30),
-                                AppColors.primary.withValues(alpha: 0.12),
-                              ],
-                            ),
-                            border: Border.all(
-                              color: Colors.white.withValues(alpha: 0.7),
-                              width: 1,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  Row(
-                    children: [
-                      for (var i = 0; i < _items.length; i++)
-                        Expanded(
-                          child: _tab(i, _items[i],
-                              showBar: false,
-                              compact: _navCollapsed,
-                              iconSize: 28),
-                        ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
         ),
       ),
     );
@@ -328,11 +196,12 @@ class _MainShellState extends State<MainShell> {
     setState(() {
       _index = i;
       _opened.add(i);
+      // Tapping the minimised bubble is how you get the full dock back.
+      _navCollapsed = false;
     });
   }
 
-  Widget _tab(int i, _NavItem item,
-      {bool showBar = true, bool compact = false, double iconSize = 25}) {
+  Widget _tab(int i, _NavItem item) {
     final on = _index == i;
     final color = on ? AppColors.primary : context.mutedColor;
     return MouseRegion(
@@ -340,60 +209,31 @@ class _MainShellState extends State<MainShell> {
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: () => _goTo(i),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (showBar)
-              Container(
-                height: 3,
-                color: on ? AppColors.primary : Colors.transparent,
-              ),
-            Padding(
-              padding: const EdgeInsets.symmetric(
-                  vertical: AppSpacing.sm, horizontal: 4),
-              child: AnimatedScale(
-                scale: on ? 1.08 : 1.0,
-                duration: const Duration(milliseconds: 160),
-                curve: Curves.easeOut,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(on ? item.active : item.inactive,
-                        size: iconSize, color: color),
-                    // Collapsed = icon-only, matching real iOS 26 tab
-                    // bars shrinking to "keep navigation instantly
-                    // accessible" while giving scrolled content more
-                    // room — AnimatedSize keeps the label's own
-                    // collapse smooth instead of an abrupt cut.
-                    AnimatedSize(
-                      duration: const Duration(milliseconds: 200),
-                      curve: Curves.easeOutCubic,
-                      child: compact
-                          ? const SizedBox.shrink()
-                          : Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const SizedBox(height: 2),
-                                Text(
-                                  item.label,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    fontWeight:
-                                        on ? FontWeight.w800 : FontWeight.w600,
-                                    color: color,
-                                  ),
-                                ),
-                              ],
-                            ),
-                    ),
-                  ],
+        child: Padding(
+          padding: const EdgeInsets.symmetric(
+              vertical: AppSpacing.sm, horizontal: 4),
+          child: AnimatedScale(
+            scale: on ? 1.08 : 1.0,
+            duration: const Duration(milliseconds: 160),
+            curve: Curves.easeOut,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(on ? item.active : item.inactive, size: 25, color: color),
+                const SizedBox(height: 2),
+                Text(
+                  item.label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: on ? FontWeight.w800 : FontWeight.w600,
+                    color: color,
+                  ),
                 ),
-              ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );
