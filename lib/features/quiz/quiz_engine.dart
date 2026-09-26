@@ -43,6 +43,9 @@ class Exercise {
   final List<String> options;
   final String correctOption;
   final String? maskedText;
+
+  /// For [Drill.blank]: which word of the ayah is hidden.
+  final int? holeIndex;
   final String? contextText;
   final String? translation;
   final String? arabic;
@@ -58,6 +61,7 @@ class Exercise {
     this.options = const [],
     this.correctOption = '',
     this.maskedText,
+    this.holeIndex,
     this.contextText,
     this.translation,
     this.arabic,
@@ -191,8 +195,7 @@ class Session {
         stage = Stage.gate;
         // Skip the known intro in the final recall too — it was never
         // taught as a step, so it's never tested as one either.
-        gateIndex =
-            chunkStart + (isKnownIntro(surah, chunkStart) ? 1 : 0);
+        gateIndex = chunkStart + (isKnownIntro(surah, chunkStart) ? 1 : 0);
         return next();
       }
 
@@ -272,8 +275,7 @@ class Session {
         );
 
       case Drill.blank:
-        final hole =
-            words.length == 1 ? 0 : 1 + _rng.nextInt(words.length - 1);
+        final hole = words.length == 1 ? 0 : 1 + _rng.nextInt(words.length - 1);
         final masked = List<String>.from(words);
         final missing = masked[hole];
         masked[hole] = '———';
@@ -282,6 +284,7 @@ class Session {
           ayahIndex: index,
           isGate: false,
           maskedText: masked.join(' '),
+          holeIndex: hole,
           options: _options(missing, words),
           correctOption: missing,
           translation: ayah.translation,

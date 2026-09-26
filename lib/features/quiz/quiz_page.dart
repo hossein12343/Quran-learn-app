@@ -12,6 +12,7 @@ import '../../shared/services/app_state.dart';
 import '../../shared/services/audio.dart';
 import '../../shared/services/recite_check.dart';
 import '../../shared/services/settings.dart';
+import '../../shared/services/weak_spots.dart';
 import '../../shared/services/sfx.dart' as tone;
 import 'quiz_engine.dart';
 
@@ -247,6 +248,7 @@ class _QuizPageState extends State<QuizPage> {
       }
     }
 
+    _noteWeakSpots(ex, correct);
     final before = _s.items[ex.ayahIndex].held;
     _s.submit(ex, correct);
     final after = _s.items[ex.ayahIndex].held;
@@ -265,6 +267,32 @@ class _QuizPageState extends State<QuizPage> {
 
     correct ? Sfx.right() : Sfx.wrong();
     if (_s.stage == Stage.sealed) Sfx.seal();
+  }
+
+  /// Remembers exactly what went wrong (or proves a weak word learned) so
+  /// it can be practised on its own from Home — see `WeakSpots`.
+  void _noteWeakSpots(Exercise ex, bool correct) {
+    final surah = widget.surah.number;
+    const whole = WeakSpot.wholeAyah;
+    switch (ex.drill) {
+      case Drill.order || Drill.blind:
+        final given = _placed.map((i) => ex.tiles[i]).toList();
+        final r = weakSpotsFromWordBank(ex.answer, given, correct);
+        appState.recordWeakSpots(surah, ex.ayahIndex,
+            missed: r.missed, right: r.right);
+      case Drill.blank:
+        final hole = ex.holeIndex;
+        if (hole == null) return;
+        appState.recordWeakSpots(surah, ex.ayahIndex,
+            missed: correct ? const [] : [hole],
+            right: correct ? [hole] : const []);
+      case Drill.next:
+        appState.recordWeakSpots(surah, ex.ayahIndex,
+            missed: correct ? const [] : const [whole],
+            right: correct ? const [whole] : const []);
+      case null:
+        return;
+    }
   }
 
   void _advance() {

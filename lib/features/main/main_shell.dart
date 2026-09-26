@@ -232,6 +232,10 @@ class _MainShellState extends State<MainShell> {
               // start/end follow the same reordering `Row` uses,
               // keeping the two in sync in either direction.
               alignment: AlignmentDirectional(_index / lastIndex * 2 - 1, -1),
+              // Without this an Align grows as tall as it's allowed to, and
+              // the Scaffold lets a bottom bar be as tall as the screen — the
+              // bar swallowed the whole page, leaving it blank.
+              heightFactor: 1,
               child: FractionallySizedBox(
                 widthFactor: 1 / _items.length,
                 child: Container(height: 3, color: AppColors.primary),

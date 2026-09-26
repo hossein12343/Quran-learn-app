@@ -13,6 +13,7 @@ import '../profile/pro_page.dart';
 import '../qibla/qibla_page.dart';
 import '../quiz/quiz_page.dart';
 import '../review/review_page.dart';
+import '../review/weak_words_page.dart';
 
 class HomePage extends StatefulWidget {
   final VoidCallback onGoToLearn;
@@ -213,6 +214,10 @@ class _HomePageState extends State<HomePage> {
             ),
             Reveal(index: 2, child: _continueCard(next)),
             const SizedBox(height: AppSpacing.xl),
+            if (!appState.weakSpots.isEmpty) ...[
+              Reveal(index: 3, child: _weakSpotsCard()),
+              const SizedBox(height: AppSpacing.xl),
+            ],
             Reveal(index: 3, child: _questsCard()),
             const SizedBox(height: AppSpacing.xl),
             Reveal(index: 4, child: RepaintBoundary(child: _levelCard())),
@@ -308,6 +313,80 @@ class _HomePageState extends State<HomePage> {
                 ),
               ),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// The words the learner keeps getting wrong in drills, with a way to
+  /// practise just those — see `WeakSpots` and `WeakWordsPage`.
+  Widget _weakSpotsCard() {
+    final t = Theme.of(context).textTheme;
+    final top = appState.weakSpots
+        .ranked()
+        .map((s) => (label: weakSpotLabel(s), place: weakSpotPlace(s)))
+        .where((e) => e.label != null)
+        .take(3)
+        .toList();
+    final count = appState.weakSpots.length;
+    return _panel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.gps_fixed_rounded,
+                  color: AppColors.streakFire, size: 20),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: Text('کلمات دشوار شما', style: t.titleLarge),
+              ),
+              Text('$count مورد',
+                  style: t.labelMedium?.copyWith(color: context.mutedColor)),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.xs),
+          Text('کلماتی که در تمرین‌ها بیشتر اشتباه کرده‌اید.',
+              style: t.bodySmall?.copyWith(color: context.mutedColor)),
+          const SizedBox(height: AppSpacing.md),
+          Wrap(
+            spacing: AppSpacing.sm,
+            runSpacing: AppSpacing.sm,
+            children: [
+              for (final e in top)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.md, vertical: AppSpacing.xs),
+                  decoration: BoxDecoration(
+                    color:
+                        Theme.of(context).colorScheme.surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(AppRadius.md),
+                  ),
+                  child: Column(
+                    children: [
+                      Directionality(
+                        textDirection: TextDirection.rtl,
+                        child: Text(e.label!,
+                            style: ArabicType.ayah(
+                                size: 20, color: AppColors.primary)),
+                      ),
+                      if (e.place != null)
+                        Text(e.place!,
+                            style: t.labelSmall
+                                ?.copyWith(color: context.mutedColor)),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.lg),
+          DuoButton(
+            label: 'تمرین این کلمات',
+            color: AppColors.streakFire,
+            onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
+              builder: (_) => const WeakWordsPage(),
+            )),
           ),
         ],
       ),

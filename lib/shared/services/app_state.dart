@@ -7,6 +7,7 @@ import 'backend.dart';
 import 'net/net.dart';
 import 'oauth/web_nav.dart';
 import 'store/local_store.dart';
+import 'weak_spots.dart';
 
 /// Single source of truth for the session. Local state is always the one
 /// the UI reads — every screen keeps working with no backend reachable.
@@ -166,6 +167,26 @@ class AppState extends ChangeNotifier {
   final Map<int, int> reviewCleanRecalls = <int, int>{};
   final Map<int, double> reviewEase = <int, double>{};
   final Map<int, int> reviewInterval = <int, int>{};
+
+  /// The exact words (and whole ayat) the learner keeps getting wrong in
+  /// drills — practised on their own from Home. Kept on this device only,
+  /// like the review schedule above.
+  final WeakSpots weakSpots = WeakSpots();
+
+  /// Records what one drill answer showed: [missed] and [right] are word
+  /// positions in that ayah, or [WeakSpot.wholeAyah].
+  void recordWeakSpots(int surah, int ayah,
+      {List<int> missed = const [], List<int> right = const []}) {
+    if (missed.isEmpty && right.isEmpty) return;
+    for (final w in missed) {
+      weakSpots.missed(surah, ayah, w);
+    }
+    for (final w in right) {
+      weakSpots.answeredRight(surah, ayah, w);
+    }
+    notifyListeners();
+    _persistSnapshot();
+  }
 
   ReviewState _reviewStateFor(int key) {
     final reps = reviewCleanRecalls[key] ?? 0;
@@ -1036,6 +1057,7 @@ class AppState extends ChangeNotifier {
       // sync, so a locally-edited copy never outlives the next sign-in.
       'isPro': isPro,
       'lastCelebratedStreakMilestone': lastCelebratedStreakMilestone,
+      'weakSpots': weakSpots.toJson(),
       // Never persist bearer credentials. Web localStorage and the desktop
       // JSON store are not credential vaults; persistence turns an XSS or
       // local-file exposure into a long-lived account takeover.
@@ -1044,6 +1066,7 @@ class AppState extends ChangeNotifier {
   }
 
   void _applySnapshot(Map<String, dynamic> snap) {
+    weakSpots.loadJson(snap['weakSpots']);
     displayName = snap['displayName'] as String? ?? displayName;
     email = snap['email'] as String? ?? email;
     totalXp = (snap['totalXp'] as num?)?.toInt() ?? totalXp;
