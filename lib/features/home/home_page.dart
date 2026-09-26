@@ -7,12 +7,12 @@ import '../../core/widgets/mascot.dart';
 import '../../core/widgets/pattern_overlay.dart';
 import '../../shared/data/quran_seed.dart';
 import '../../shared/services/app_state.dart';
+import '../../shared/services/daily_plan.dart';
 import '../../shared/services/hijri_date.dart';
 import '../prayer_times/prayer_times_page.dart';
 import '../profile/pro_page.dart';
 import '../qibla/qibla_page.dart';
 import '../quiz/quiz_page.dart';
-import '../review/review_page.dart';
 import '../review/weak_words_page.dart';
 
 class HomePage extends StatefulWidget {
@@ -77,18 +77,6 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  void _openReview() {
-    final due = appState.dueForReview;
-    if (due.isEmpty) return;
-    final item = due.first;
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) =>
-            QuizPage(surah: item.surah, chunkIndex: item.chunkIndex),
-      ),
-    );
-  }
-
   bool _celebratingMilestone = false;
 
   /// Fires at most once per newly-reached milestone (see
@@ -116,6 +104,7 @@ class _HomePageState extends State<HomePage> {
   Widget build(BuildContext context) {
     _maybeCelebrateStreak();
     final next = appState.nextSurah;
+    final plan = appState.todayPlan;
     return Scaffold(
       body: SafeArea(
         child: ListView(
@@ -199,17 +188,17 @@ class _HomePageState extends State<HomePage> {
             Reveal(index: 0, child: _weekStrip()),
             const SizedBox(height: AppSpacing.xl),
             // Due reviews often arrive a moment after the page opens (they
-            // come with the progress synced in after sign-in), so the banner
+            // come with the progress synced in after sign-in), so the plan
             // grows in rather than popping in and shoving everything down.
             AnimatedSize(
               duration: Motion.enter,
               curve: Motion.smooth,
               alignment: Alignment.topCenter,
-              child: appState.dueForReview.isEmpty
+              child: plan.isEmpty
                   ? const SizedBox(width: double.infinity)
                   : Padding(
                       padding: const EdgeInsets.only(bottom: AppSpacing.xl),
-                      child: Reveal(index: 1, child: _reviewBanner()),
+                      child: Reveal(index: 1, child: _planCard(plan)),
                     ),
             ),
             Reveal(index: 2, child: _continueCard(next)),
@@ -239,82 +228,177 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  void _openReviewList() {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => const ReviewPage()),
+  void _openStep(PlanStep step) {
+    final nav = Navigator.of(context);
+    switch (step.kind) {
+      case PlanStepKind.newLesson:
+        _openNext();
+      case PlanStepKind.recentRevision || PlanStepKind.oldRevision:
+        final due = appState.dueFor(step.kind);
+        if (due.isEmpty) return;
+        nav.push(MaterialPageRoute<void>(
+          builder: (_) => QuizPage(
+              surah: due.first.surah, chunkIndex: due.first.chunkIndex),
+        ));
+      case PlanStepKind.weakWords:
+        nav.push(MaterialPageRoute<void>(
+          builder: (_) => const WeakWordsPage(),
+        ));
+    }
+  }
+
+  ({String title, String detail}) _stepText(PlanStep step) {
+    switch (step.kind) {
+      case PlanStepKind.newLesson:
+        final s = appState.nextSurah;
+        return (
+          title: 'درس تازه',
+          detail: step.isDone || s == null
+              ? 'امروز آیه‌های تازه حفظ کردید.'
+              : '${s.arabicName} · سطح ${appState.nextChunkFor(s) + 1}',
+        );
+      case PlanStepKind.recentRevision:
+        return (
+          title: 'مرور تازه‌ها',
+          detail: _dueDetail(step, 'سطح‌هایی که همین روزها حفظ کرده‌اید'),
+        );
+      case PlanStepKind.oldRevision:
+        return (
+          title: 'مرور قدیمی‌ها',
+          detail: _dueDetail(step, 'سطح‌هایی که مدتی از حفظشان گذشته'),
+        );
+      case PlanStepKind.weakWords:
+        final n = appState.weakSpots.length;
+        return (
+          title: 'کلمات دشوار',
+          detail: step.isDone && n == 0
+              ? 'همهٔ کلمات دشوار درست شدند.'
+              : '$n کلمه که بیشتر اشتباه کرده‌اید',
+        );
+    }
+  }
+
+  /// Names the next level to revise, so the row says what's coming.
+  String _dueDetail(PlanStep step, String fallback) {
+    if (step.isDone) return fallback;
+    final due = appState.dueFor(step.kind);
+    if (due.isEmpty) return fallback;
+    final first =
+        '${due.first.surah.arabicName} · سطح ${due.first.chunkIndex + 1}';
+    final left = step.target - step.done - 1;
+    return left > 0 ? '$first و $left سطح دیگر' : first;
+  }
+
+  /// The whole day in one place, in the order a hifz teacher would set it:
+  /// the new lesson, revision of recent and of older levels, then the
+  /// words that keep slipping. Done steps stay, ticked off.
+  Widget _planCard(List<PlanStep> plan) {
+    final t = Theme.of(context).textTheme;
+    final doneCount = plan.where((s) => s.isDone).length;
+    final nextIndex = plan.indexWhere((s) => !s.isDone);
+    final allDone = nextIndex == -1;
+    return _panel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.event_note_rounded,
+                  color: AppColors.primary, size: 20),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(child: Text('برنامهٔ امروز', style: t.titleLarge)),
+              Text('$doneCount از ${plan.length}',
+                  style: t.labelMedium?.copyWith(color: AppColors.primary)),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.xs),
+          Text(
+            allDone
+                ? 'کارهای امروز تمام شد. آفرین!'
+                : 'به همین ترتیب پیش بروید: اول درس تازه، بعد مرور.',
+            style: t.bodySmall?.copyWith(color: context.mutedColor),
+          ),
+          const SizedBox(height: AppSpacing.md),
+          for (var i = 0; i < plan.length; i++) ...[
+            if (i > 0) const SizedBox(height: AppSpacing.sm),
+            _planRow(plan[i], number: i + 1, isNext: i == nextIndex),
+          ],
+          if (!allDone) ...[
+            const SizedBox(height: AppSpacing.lg),
+            DuoButton(
+              label: doneCount == 0 ? 'شروع برنامه' : 'ادامهٔ برنامه',
+              color: AppColors.primary,
+              onTap: () => _openStep(plan[nextIndex]),
+            ),
+          ],
+        ],
+      ),
     );
   }
 
-  Widget _reviewBanner() {
-    final due = appState.dueForReview;
-    final first = due.first;
-    return Container(
-      padding: const EdgeInsets.all(AppSpacing.lg),
-      decoration: BoxDecoration(
-        color: AppColors.goldLight,
-        borderRadius: BorderRadius.circular(AppRadius.xl),
-        border: Border.all(color: AppColors.gold, width: 2),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 44,
-            height: 44,
-            alignment: Alignment.center,
-            decoration: const BoxDecoration(
-              shape: BoxShape.circle,
-              color: AppColors.gold,
+  Widget _planRow(PlanStep step, {required int number, required bool isNext}) {
+    final t = Theme.of(context).textTheme;
+    final text = _stepText(step);
+    final done = step.isDone;
+    final showCount = step.target > 1;
+    return Pressable(
+      onTap: done ? null : () => _openStep(step),
+      child: Container(
+        padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.md, vertical: AppSpacing.sm),
+        decoration: BoxDecoration(
+          color: isNext ? AppColors.primaryLight : Colors.transparent,
+          borderRadius: BorderRadius.circular(AppRadius.lg),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 32,
+              height: 32,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: done ? AppColors.primary : Colors.transparent,
+                border: Border.all(
+                  color:
+                      done || isNext ? AppColors.primary : context.borderColor,
+                  width: 2,
+                ),
+              ),
+              child: done
+                  ? const Icon(Icons.check_rounded,
+                      size: 18, color: AppColors.white)
+                  : Text('$number',
+                      style: t.labelLarge?.copyWith(
+                          color:
+                              isNext ? AppColors.primary : context.mutedColor)),
             ),
-            child: const Icon(Icons.refresh_rounded,
-                color: AppColors.white, size: 22),
-          ),
-          const SizedBox(width: AppSpacing.md),
-          Expanded(
-            child: Pressable(
-              onTap: due.length > 1 ? _openReviewList : _openReview,
+            const SizedBox(width: AppSpacing.md),
+            Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    due.length == 1
-                        ? 'وقت مرور سوره ${first.surah.englishName} است'
-                        : '${due.length} سطح برای مرور آماده است',
-                    style: Theme.of(context)
-                        .textTheme
-                        .titleMedium
-                        ?.copyWith(color: AppColors.secondaryDark),
+                    text.title,
+                    style: t.titleMedium?.copyWith(
+                      color: done ? context.mutedColor : null,
+                      decoration: done ? TextDecoration.lineThrough : null,
+                    ),
                   ),
-                  Text(
-                    due.length > 1
-                        ? 'برای دیدن همه ضربه بزن.'
-                        : 'یک یادآوری سریع بدون کمک، آن را در حافظه نگه می‌دارد.',
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
+                  Text(text.detail,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: t.bodySmall?.copyWith(color: context.mutedColor)),
                 ],
               ),
             ),
-          ),
-          Pressable(
-            onTap: _openReview,
-            child: Container(
-              padding: const EdgeInsets.symmetric(
-                  horizontal: AppSpacing.md, vertical: AppSpacing.sm),
-              decoration: BoxDecoration(
-                color: AppColors.gold,
-                borderRadius: BorderRadius.circular(AppRadius.circular),
-              ),
-              child: const Text(
-                'مرور',
-                style: TextStyle(
-                  color: AppColors.white,
-                  fontWeight: FontWeight.w800,
-                  fontSize: 12,
-                  letterSpacing: 0.4,
-                ),
-              ),
-            ),
-          ),
-        ],
+            if (showCount) ...[
+              const SizedBox(width: AppSpacing.sm),
+              Text('${step.done.clamp(0, step.target)}/${step.target}',
+                  style: t.labelMedium),
+            ],
+          ],
+        ),
       ),
     );
   }

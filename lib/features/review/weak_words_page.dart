@@ -167,6 +167,7 @@ class _WeakWordsPageState extends State<WeakWordsPage> {
       _selected = null;
       _checked = false;
     });
+    if (_done) appState.noteWeakWordsPractised();
   }
 
   @override

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../data/quran_seed.dart';
 import 'app_log.dart';
 import 'backend.dart';
+import 'daily_plan.dart';
 import 'net/net.dart';
 import 'oauth/web_nav.dart';
 import 'store/local_store.dart';
@@ -184,6 +185,44 @@ class AppState extends ChangeNotifier {
     for (final w in right) {
       weakSpots.answeredRight(surah, ayah, w);
     }
+    notifyListeners();
+    _persistSnapshot();
+  }
+
+  /// What's been done toward [todayPlan] today. Device-only, like the
+  /// review schedule it's built from.
+  final DailyPlanLog planLog = DailyPlanLog();
+
+  /// One plan for the day: the new lesson, recent and old revision, and
+  /// the hard words — see [DailyPlan].
+  List<PlanStep> get todayPlan {
+    final due = dueForReview;
+    final recent = due.where(_isRecentReview).length;
+    return DailyPlan.build(
+      hasNewLesson: nextSurah != null,
+      recentDue: recent,
+      oldDue: due.length - recent,
+      hasWeakWords: !weakSpots.isEmpty,
+      log: planLog,
+      today: _todayKey(),
+    );
+  }
+
+  /// Due levels in plan order: recent revision, then old revision.
+  List<({Surah surah, int chunkIndex, DateTime due})> dueFor(
+          PlanStepKind kind) =>
+      dueForReview
+          .where((d) =>
+              _isRecentReview(d) == (kind == PlanStepKind.recentRevision))
+          .toList();
+
+  bool _isRecentReview(({Surah surah, int chunkIndex, DateTime due}) d) =>
+      DailyPlan.isRecent(
+          _reviewStateFor(levelKey(d.surah.number, d.chunkIndex)).intervalDays);
+
+  /// A practice round of the hard words was finished.
+  void noteWeakWordsPractised() {
+    planLog.note(PlanStepKind.weakWords, _todayKey());
     notifyListeners();
     _persistSnapshot();
   }
@@ -874,10 +913,22 @@ class AppState extends ChangeNotifier {
       _ayatLearnedToday += newlyHeld;
     }
     _heldAyat[surahNumber] = heldIndicesNow;
+    final today = _todayKey();
+    var learnedSomethingNew = newlyHeld > 0;
     if (sealedChunk != null) {
       final key = levelKey(surahNumber, sealedChunk);
       final firstTime = sealedLevels.add(key);
       if (firstTime) totalXp += 15;
+      if (firstTime) {
+        learnedSomethingNew = true;
+      } else {
+        // Recent or old revision, by the gap it was due after.
+        planLog.note(
+            DailyPlan.isRecent(_reviewStateFor(key).intervalDays)
+                ? PlanStepKind.recentRevision
+                : PlanStepKind.oldRevision,
+            today);
+      }
       // First seal → due tomorrow. A clean review multiplies the gap by
       // this level's ease and nudges the ease up; a lapse shrinks both but
       // keeps most of what the level earned. See [ReviewSchedule].
@@ -890,6 +941,7 @@ class AppState extends ChangeNotifier {
       reviewDue[key] =
           ReviewSchedule.dueDate(DateTime.now(), next.intervalDays);
     }
+    if (learnedSomethingNew) planLog.note(PlanStepKind.newLesson, today);
     if (didSeal) {
       sealed.add(surahNumber);
       totalXp += 50;
@@ -1058,6 +1110,7 @@ class AppState extends ChangeNotifier {
       'isPro': isPro,
       'lastCelebratedStreakMilestone': lastCelebratedStreakMilestone,
       'weakSpots': weakSpots.toJson(),
+      'planLog': planLog.toJson(),
       // Never persist bearer credentials. Web localStorage and the desktop
       // JSON store are not credential vaults; persistence turns an XSS or
       // local-file exposure into a long-lived account takeover.
@@ -1067,6 +1120,7 @@ class AppState extends ChangeNotifier {
 
   void _applySnapshot(Map<String, dynamic> snap) {
     weakSpots.loadJson(snap['weakSpots']);
+    planLog.loadJson(snap['planLog']);
     displayName = snap['displayName'] as String? ?? displayName;
     email = snap['email'] as String? ?? email;
     totalXp = (snap['totalXp'] as num?)?.toInt() ?? totalXp;

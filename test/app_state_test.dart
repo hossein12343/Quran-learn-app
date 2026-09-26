@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quran_learn_app/shared/data/quran_seed.dart';
 import 'package:quran_learn_app/shared/services/app_state.dart';
+import 'package:quran_learn_app/shared/services/daily_plan.dart';
 
 String ymd(DateTime d) => '${d.year.toString().padLeft(4, '0')}-'
     '${d.month.toString().padLeft(2, '0')}-'
@@ -32,6 +33,8 @@ void main() {
     appState.reviewEase.clear();
     appState.reviewInterval.clear();
     appState.activeDates.clear();
+    appState.planLog.clear();
+    appState.weakSpots.clear();
   });
 
   test('recordSession awards 12 XP per newly held ayah', () {
@@ -161,6 +164,56 @@ void main() {
     expect(appState.reviewCleanRecalls[key], 1);
     expect(appState.reviewEase[key], ReviewSchedule.startEase); // no lapses
     expect(appState.dueForReview, isEmpty); // not due until tomorrow
+  });
+
+  group("today's plan", () {
+    PlanStep step(PlanStepKind kind) =>
+        appState.todayPlan.firstWhere((s) => s.kind == kind);
+
+    test('learning new ayat ticks off the new lesson', () {
+      expect(step(PlanStepKind.newLesson).isDone, isFalse);
+      appState.recordSession(
+        surahNumber: 401, // held ayat aren't reset between tests
+        heldIndicesNow: {0, 1},
+        didSeal: false,
+        minutes: 2,
+      );
+      expect(step(PlanStepKind.newLesson).isDone, isTrue);
+    });
+
+    test('due levels split into recent and old revision by their gap', () {
+      final yesterday = DateTime.now().subtract(const Duration(days: 1));
+      for (final (surah, gap) in [(1, 1), (112, 20)]) {
+        final key = appState.levelKey(surah, 0);
+        appState.sealedLevels.add(key);
+        appState.reviewDue[key] = yesterday;
+        appState.reviewInterval[key] = gap;
+        appState.reviewCleanRecalls[key] = 2;
+      }
+      expect(
+          appState.dueFor(PlanStepKind.recentRevision).single.surah.number, 1);
+      expect(
+          appState.dueFor(PlanStepKind.oldRevision).single.surah.number, 112);
+
+      // Reviewing the old one ticks off old revision, not recent.
+      appState.recordSession(
+        surahNumber: 112,
+        heldIndicesNow: appState.heldIndices(112),
+        didSeal: false,
+        sealedChunk: 0,
+        minutes: 1,
+      );
+      final old = step(PlanStepKind.oldRevision);
+      expect((old.done, old.isDone), (1, true));
+      expect(step(PlanStepKind.recentRevision).isDone, isFalse);
+    });
+
+    test('finishing a round of hard words ticks that step off', () {
+      appState.recordWeakSpots(1, 1, missed: [0]);
+      expect(step(PlanStepKind.weakWords).isDone, isFalse);
+      appState.noteWeakWordsPractised();
+      expect(step(PlanStepKind.weakWords).isDone, isTrue);
+    });
   });
 
   test(
