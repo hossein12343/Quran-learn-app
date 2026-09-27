@@ -359,10 +359,7 @@ class AppState extends ChangeNotifier {
   /// level, the surah itself) is unlocked — the same one-thing-at-a-time
   /// rule as surahs, just one level deeper.
   bool isLevelUnlocked(Surah surah, int chunkIndex) {
-    if (chunkIndex == 0) {
-      final si = surahs.indexWhere((s) => s.number == surah.number);
-      return si == -1 ? false : isUnlocked(si);
-    }
+    if (chunkIndex == 0) return isSurahUnlocked(surah);
     return isLevelSealed(surah.number, chunkIndex - 1);
   }
 
@@ -427,16 +424,136 @@ class AppState extends ChangeNotifier {
   double get dailyProgress =>
       dailyGoalMinutes == 0 ? 0 : (minutesToday / dailyGoalMinutes).clamp(0, 1);
 
-  bool isUnlocked(int index) {
-    if (index == 0) return true;
-    return sealed.contains(surahs[index - 1].number);
+  /// [learningGoal] values that pick the learning order. The goal already
+  /// syncs to the account, so the order follows the learner everywhere.
+  static const goalShortSurahs = 'حفظ سوره‌های کوتاه';
+  static const goalFromStart = 'حفظ از ابتدای قرآن';
+
+  bool get learnsFromStart => learningGoal == goalFromStart;
+
+  List<Surah>? _pathCache;
+  List<Surah>? _pathCacheSource;
+  bool? _pathCacheFromStart;
+
+  /// The order surahs are learned in. Most hifz classes start with the
+  /// short surahs: Al-Fatihah, then An-Nas and on backward toward
+  /// Al-Baqarah — the default. "From the start" is the mushaf's own order.
+  /// (It used to be only that: a beginner went from Al-Fatihah straight
+  /// into Al-Baqarah's 286 ayat.)
+  List<Surah> get learningPath {
+    if (!identical(_pathCacheSource, surahs) ||
+        _pathCacheFromStart != learnsFromStart) {
+      _pathCacheSource = surahs;
+      _pathCacheFromStart = learnsFromStart;
+      _pathCache = learnsFromStart
+          ? List.unmodifiable(surahs)
+          : List.unmodifiable([
+              ...surahs.where((s) => s.number == 1),
+              ...surahs.where((s) => s.number != 1).toList().reversed,
+            ]);
+    }
+    return _pathCache!;
   }
 
-  Surah? get nextSurah {
-    for (var i = 0; i < surahs.length; i++) {
-      if (!sealed.contains(surahs[i].number) && isUnlocked(i)) {
-        return surahs[i];
+  /// Any ayah held or level sealed in it.
+  bool hasStarted(Surah s) =>
+      (_heldAyat[s.number]?.isNotEmpty ?? false) ||
+      sealed.contains(s.number) ||
+      sealedLevels.any((k) => k ~/ 1000 == s.number);
+
+  /// Open once the surah before it on [learningPath] is sealed — or if it's
+  /// already been started, so changing the order never locks away work.
+  bool isSurahUnlocked(Surah s) {
+    final path = learningPath;
+    final i = path.indexWhere((x) => x.number == s.number);
+    if (i <= 0) return i == 0;
+    return sealed.contains(path[i - 1].number) || hasStarted(s);
+  }
+
+  /// Surahs the learner already knows by heart, picked on the welcome
+  /// screen: held and sealed without the lessons, so the path moves on
+  /// past them — and every level goes into old revision, a few a day from
+  /// tomorrow, so the app still checks each one (gently, one unaided
+  /// recall) instead of teaching it all again. No points: those are for
+  /// work done here.
+  void markSurahsKnown(Iterable<int> surahNumbers) {
+    final wanted = surahNumbers.toSet();
+    final now = DateTime.now();
+    var slot = 0;
+    final marked = <Surah>[];
+    // In path order, so what was learned first is checked first.
+    for (final s in learningPath.where((s) => wanted.contains(s.number))) {
+      if (sealed.contains(s.number)) continue;
+      _heldAyat[s.number] = {for (var i = 0; i < s.length; i++) i};
+      sealed.add(s.number);
+      for (var c = 0; c < chunkCountFor(s); c++) {
+        final key = levelKey(s.number, c);
+        if (!sealedLevels.add(key)) continue; // keep a real schedule
+        reviewCleanRecalls[key] = 1;
+        reviewEase[key] = ReviewSchedule.startEase;
+        reviewInterval[key] = DailyPlan.recentUnderDays;
+        reviewDue[key] =
+            ReviewSchedule.dueDate(now, 1 + slot ~/ DailyPlan.oldPerDay);
+        slot++;
       }
+      marked.add(s);
+    }
+    if (marked.isEmpty) return;
+    notifyListeners();
+    _persistSnapshot();
+    _scheduleLearningSave();
+    final userId = _userId;
+    if (_authToken == null || userId == null) return;
+    for (final s in marked) {
+      unawaited(withFreshToken((token) => Backend.upsertSurahProgress(
+            token,
+            userId,
+            surah: s.number,
+            heldCount: s.length,
+            sealed: true,
+          )).catchError((Object
+              e) =>
+          AppLog.warn('Progress sync failed for surah ${s.number}', error: e)));
+    }
+  }
+
+  static const _kWelcomedKey = 'welcomed';
+
+  /// True once signing in has finished pulling the account's progress —
+  /// before that, a returning learner can look brand new.
+  bool _signInSynced = false;
+
+  bool get _hasAnyProgress =>
+      totalXp > 0 ||
+      sealed.isNotEmpty ||
+      sealedLevels.isNotEmpty ||
+      _heldAyat.values.any((s) => s.isNotEmpty);
+
+  /// A brand-new account that hasn't seen the welcome screen — including
+  /// one made with Google, which skips the email sign-up that leads there.
+  bool get needsWelcome =>
+      signedIn &&
+      _signInSynced &&
+      !_hasAnyProgress &&
+      LocalStore.get(_kWelcomedKey) == null;
+
+  void markWelcomed() => LocalStore.set(_kWelcomedKey, '1');
+
+  @visibleForTesting
+  void debugFinishSignIn() {
+    signedIn = true;
+    _signInSynced = true;
+  }
+
+  /// What "continue" opens: a surah already under way comes first, then
+  /// the next one on [learningPath].
+  Surah? get nextSurah {
+    final path = learningPath;
+    for (final s in path) {
+      if (!sealed.contains(s.number) && hasStarted(s)) return s;
+    }
+    for (final s in path) {
+      if (!sealed.contains(s.number) && isSurahUnlocked(s)) return s;
     }
     return null;
   }
@@ -605,6 +722,7 @@ class AppState extends ChangeNotifier {
       await _syncLearningState();
       await _pullSurahProgress();
       await _pullBookmarks();
+      _signInSynced = true;
       syncNotice = null;
     } on NetException catch (e) {
       syncNotice = 'برخی اطلاعات هنوز همگام نشده — کمی بعد دوباره امتحان کنید.';
@@ -799,6 +917,9 @@ class AppState extends ChangeNotifier {
     // one's progress merged into it.
     _clearLearningState();
     _snapshotOwner = null;
+    // The next person to sign in here may be brand new.
+    _signInSynced = false;
+    LocalStore.remove(_kWelcomedKey);
     LocalStore.remove('session');
     LocalStore.remove(_kRefreshTokenKey);
     notifyListeners();
@@ -1102,6 +1223,9 @@ class AppState extends ChangeNotifier {
     weakSpotsChangedAt = state.weakSpotsAt;
     planLog.loadJson(state.planLog.toJson());
   }
+
+  @visibleForTesting
+  void debugClearProgress() => _clearLearningState();
 
   void _clearLearningState() {
     _learningSaveTimer?.cancel();

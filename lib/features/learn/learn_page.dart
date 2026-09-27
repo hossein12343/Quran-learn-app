@@ -83,9 +83,14 @@ class _LearnPageState extends State<LearnPage> {
     });
   }
 
+  /// The order the path was laid out in; it's laid out again if the
+  /// learner switches (see [AppState.learningPath]).
+  bool? _laidOutFromStart;
+
   void _layout() {
     _items = <_PathItem>[];
-    for (final s in surahs) {
+    _laidOutFromStart = appState.learnsFromStart;
+    for (final s in appState.learningPath) {
       _items.add(_PathItem.header(s));
       final count = chunkCountFor(s);
       for (var c = 0; c < count; c++) {
@@ -111,7 +116,16 @@ class _LearnPageState extends State<LearnPage> {
     }
   }
 
+  /// The level "continue" would open (see [AppState.nextSurah]), or else
+  /// the first one not yet sealed.
   int? _nextItemIndex() {
+    final next = appState.nextSurah;
+    if (next != null) {
+      final chunk = appState.nextChunkFor(next);
+      final i = _items.indexWhere(
+          (it) => it.surah.number == next.number && it.chunkIndex == chunk);
+      if (i != -1) return i;
+    }
     for (var i = 0; i < _items.length; i++) {
       final chunk = _items[i].chunkIndex;
       if (chunk != null &&
@@ -139,6 +153,10 @@ class _LearnPageState extends State<LearnPage> {
 
   @override
   Widget build(BuildContext context) {
+    if (_laidOutFromStart != appState.learnsFromStart) {
+      _layout();
+      _scrollToNextSoon();
+    }
     final nextIndex = _nextItemIndex();
     return Scaffold(
       appBar: AppBar(title: const Text('یادگیری')),
@@ -221,8 +239,7 @@ class _LearnPageState extends State<LearnPage> {
   }
 
   Widget _header(Surah s) {
-    final si = surahs.indexWhere((x) => x.number == s.number);
-    final unlocked = appState.isUnlocked(si);
+    final unlocked = appState.isSurahUnlocked(s);
     final sealed = appState.sealed.contains(s.number);
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
@@ -253,7 +270,8 @@ class _LearnPageState extends State<LearnPage> {
                 Text(
                   '${s.meaning} · ${s.length} آیه',
                   style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.85), fontSize: 12),
+                      color: Colors.white.withValues(alpha: 0.85),
+                      fontSize: 12),
                 ),
               ],
             ),

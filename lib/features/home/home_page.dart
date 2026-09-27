@@ -311,7 +311,13 @@ class _HomePageState extends State<HomePage> {
           Text(
             allDone
                 ? 'کارهای امروز تمام شد. آفرین!'
-                : 'به همین ترتیب پیش بروید: اول درس تازه، بعد مرور.',
+                : appState.ayatHeld == 0
+                    // The very first visit: the ordering advice below
+                    // means nothing yet, a first step does.
+                    ? 'اولین درس فقط چند دقیقه طول می‌کشد.'
+                    : plan.length == 1
+                        ? 'امروز فقط همین یک کار را دارید.'
+                        : 'به همین ترتیب پیش بروید: اول درس تازه، بعد مرور.',
             style: t.bodySmall?.copyWith(color: context.mutedColor),
           ),
           const SizedBox(height: AppSpacing.md),

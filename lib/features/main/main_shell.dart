@@ -4,6 +4,7 @@ import '../../core/theme/app_theme.dart';
 import '../../shared/services/app_state.dart';
 import '../../shared/services/glass_dock.dart';
 import '../../shared/services/platform_info.dart';
+import '../auth/auth_pages.dart' show OnboardingPage;
 import '../home/home_page.dart';
 import '../learn/learn_page.dart';
 import '../practice/practice_page.dart';
@@ -119,6 +120,7 @@ class _MainShellState extends State<MainShell> {
       animation: appState,
       builder: (context, _) {
         if (isIPhone) _syncDock(context);
+        _maybeWelcome();
         // This is the bottom of the app's navigation stack, so a "back"
         // here has nowhere inside the app to go. Left alone, Flutter hands
         // it to the browser, which leaves the site entirely — the "back
@@ -176,6 +178,27 @@ class _MainShellState extends State<MainShell> {
         );
       },
     );
+  }
+
+  static bool _welcoming = false;
+
+  /// An account made with Google lands here without the welcome screen
+  /// the email sign-up goes through; once its progress has loaded and
+  /// turns out to be empty, show that screen over Home, once.
+  void _maybeWelcome() {
+    if (_welcoming || !appState.needsWelcome) return;
+    _welcoming = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) {
+        _welcoming = false;
+        return;
+      }
+      await Navigator.of(context).push(MaterialPageRoute<void>(
+        fullscreenDialog: true,
+        builder: (_) => const OnboardingPage(),
+      ));
+      _welcoming = false;
+    });
   }
 
   Widget _page(int i) => switch (i) {

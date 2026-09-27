@@ -9,8 +9,10 @@ import '../../core/widgets/language_toggle.dart';
 import '../../shared/services/app_state.dart';
 import '../../shared/services/backend.dart';
 import '../../shared/services/captcha.dart';
+import '../../shared/services/daily_plan.dart';
 import '../../shared/services/net/net.dart';
 import '../../shared/services/oauth/web_nav.dart';
+import 'known_surahs_sheet.dart';
 
 /// The origin (`https://host/`) this page is running at — what OAuth
 /// providers redirect back to. Built from `Uri.origin` rather than
@@ -1306,6 +1308,10 @@ class _NewPasswordPageState extends State<NewPasswordPage> {
 
 // ------------------------------------------------------------ onboarding
 
+/// The welcome screen a brand-new account sees once: where to start, which
+/// surahs are already known, and how long a day. Each answer changes what
+/// the app does — the order of the path, what's skipped and put into
+/// revision instead, and the daily goal.
 class OnboardingPage extends StatefulWidget {
   const OnboardingPage({super.key});
 
@@ -1314,104 +1320,152 @@ class OnboardingPage extends StatefulWidget {
 }
 
 class _OnboardingPageState extends State<OnboardingPage> {
-  static const _goals = <String>[
-    'حفظ سوره‌های کوتاه',
-    'حفظ یک جزء',
-    'مرور آنچه قبلاً حفظ کرده‌ام',
-  ];
   static const _minutes = <int>[5, 10, 20];
 
-  String _goal = _goals.first;
-  int _daily = 10;
+  bool _fromStart = appState.learnsFromStart;
+  Set<int> _known = {};
+  int _daily = appState.dailyGoalMinutes;
+
+  Future<void> _pickKnown() async {
+    final picked = await pickKnownSurahs(context, _known);
+    if (picked != null && mounted) setState(() => _known = picked);
+  }
+
+  void _start() {
+    appState.setGoal(
+      _fromStart ? AppState.goalFromStart : AppState.goalShortSurahs,
+      _daily,
+    );
+    if (_known.isNotEmpty) appState.markSurahsKnown(_known);
+    appState.markWelcomed();
+    // Shown over Home for an account made with Google; as its own page
+    // after the email sign-up.
+    final navigator = Navigator.of(context);
+    if (navigator.canPop()) {
+      navigator.pop();
+    } else {
+      navigator.pushReplacementNamed('/home');
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: SafeArea(
-        child: Column(
-          children: [
-            Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(AppSpacing.xl),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const SizedBox(height: AppSpacing.lg),
-                    Reveal(
-                        index: 0,
-                        child: const Center(child: Wordmark(size: 48))),
-                    const SizedBox(height: AppSpacing.lg),
-                    Reveal(
-                      index: 1,
-                      child: Text('برای چه اینجا آمده‌اید؟',
-                          style: Theme.of(context).textTheme.displayMedium),
-                    ),
-                    const SizedBox(height: AppSpacing.xl),
-                    for (var i = 0; i < _goals.length; i++)
+    final t = Theme.of(context).textTheme;
+    final knownLevels = levelsIn(_known);
+    return PopScope(
+      // Answering is the way out: it's a handful of taps, and leaving
+      // without it would only bring the screen straight back.
+      canPop: false,
+      child: Scaffold(
+        body: SafeArea(
+          child: Column(
+            children: [
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(AppSpacing.xl),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
                       Reveal(
-                        index: i + 2,
-                        child: Padding(
-                          padding: const EdgeInsets.only(bottom: AppSpacing.md),
-                          child: _choice(
-                            _goals[i],
-                            selected: _goal == _goals[i],
-                            onTap: () => setState(() => _goal = _goals[i]),
-                          ),
-                        ),
+                          index: 0,
+                          child: const Center(child: Wordmark(size: 48))),
+                      const SizedBox(height: AppSpacing.lg),
+                      Reveal(
+                        index: 1,
+                        child: Text('خوش آمدید',
+                            textAlign: TextAlign.center,
+                            style: t.displayMedium),
                       ),
-                    const SizedBox(height: AppSpacing.xxl),
-                    Text('هر روز چقدر وقت می‌گذارید؟',
-                        style: Theme.of(context).textTheme.headlineSmall),
-                    const SizedBox(height: AppSpacing.lg),
-                    Row(
-                      children: [
-                        for (final m in _minutes) ...[
-                          Expanded(
-                            child: _choice(
-                              '$m دقیقه',
-                              selected: _daily == m,
-                              onTap: () => setState(() => _daily = m),
-                              center: true,
+                      const SizedBox(height: AppSpacing.xs),
+                      Text(
+                        'سه سؤال کوتاه تا برنامه‌تان را بچینیم.',
+                        textAlign: TextAlign.center,
+                        style:
+                            t.bodyMedium?.copyWith(color: context.mutedColor),
+                      ),
+                      const SizedBox(height: AppSpacing.xl),
+                      Text('از کجا شروع کنیم؟', style: t.headlineSmall),
+                      const SizedBox(height: AppSpacing.md),
+                      _choice(
+                        'سوره‌های کوتاه',
+                        detail: 'الفاتحه، بعد از الناس رو به عقب — '
+                            'مثل بیشتر کلاس‌های حفظ',
+                        selected: !_fromStart,
+                        onTap: () => setState(() => _fromStart = false),
+                      ),
+                      const SizedBox(height: AppSpacing.md),
+                      _choice(
+                        'از ابتدای قرآن',
+                        detail: 'الفاتحه، البقره، آل عمران و به همین ترتیب',
+                        selected: _fromStart,
+                        onTap: () => setState(() => _fromStart = true),
+                      ),
+                      const SizedBox(height: AppSpacing.xl),
+                      Text('سوره‌ای را از قبل حفظ هستید؟',
+                          style: t.headlineSmall),
+                      const SizedBox(height: AppSpacing.md),
+                      _choice(
+                        _known.isEmpty
+                            ? 'انتخاب سوره‌هایی که حفظم'
+                            : '${_known.length} سوره انتخاب شد',
+                        detail: _known.isEmpty
+                            ? 'دوباره درسشان نمی‌دهیم؛ فقط کم‌کم مرورشان '
+                                'می‌کنید. اگر تازه شروع می‌کنید، رد شوید.'
+                            : '$knownLevels سطح، روزی '
+                                '${DailyPlan.oldPerDay} تا، به مرورها اضافه '
+                                'می‌شود. برای تغییر بزنید.',
+                        selected: _known.isNotEmpty,
+                        onTap: _pickKnown,
+                      ),
+                      const SizedBox(height: AppSpacing.xl),
+                      Text('هر روز چقدر وقت می‌گذارید؟',
+                          style: t.headlineSmall),
+                      const SizedBox(height: AppSpacing.md),
+                      Row(
+                        children: [
+                          for (final m in _minutes) ...[
+                            Expanded(
+                              child: _choice(
+                                '$m دقیقه',
+                                selected: _daily == m,
+                                onTap: () => setState(() => _daily = m),
+                                center: true,
+                              ),
                             ),
-                          ),
-                          if (m != _minutes.last)
-                            const SizedBox(width: AppSpacing.md),
+                            if (m != _minutes.last)
+                              const SizedBox(width: AppSpacing.md),
+                          ],
                         ],
-                      ],
-                    ),
-                  ],
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(AppSpacing.xl),
-              child: BigButton(
-                label: 'شروع یادگیری',
-                onTap: () {
-                  appState.setGoal(_goal, _daily);
-                  Navigator.of(context).pushReplacementNamed('/home');
-                },
+              Padding(
+                padding: const EdgeInsets.all(AppSpacing.xl),
+                child: BigButton(label: 'شروع یادگیری', onTap: _start),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
   }
 
   Widget _choice(String label,
-      {required bool selected,
+      {String? detail,
+      required bool selected,
       required VoidCallback onTap,
       bool center = false}) {
+    final t = Theme.of(context).textTheme;
     return Pressable(
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 180),
         padding: const EdgeInsets.all(AppSpacing.lg),
-        alignment: center ? Alignment.center : null,
         decoration: BoxDecoration(
           color: selected
-              ? AppColors.primaryLight
+              ? AppColors.primary.withValues(alpha: 0.12)
               : Theme.of(context).colorScheme.surface,
           borderRadius: BorderRadius.circular(AppRadius.lg),
           border: Border.all(
@@ -1419,11 +1473,22 @@ class _OnboardingPageState extends State<OnboardingPage> {
             width: 2.5,
           ),
         ),
-        child: Text(
-          label,
-          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                color: selected ? AppColors.primaryDeep : null,
+        child: Column(
+          crossAxisAlignment:
+              center ? CrossAxisAlignment.center : CrossAxisAlignment.start,
+          children: [
+            Text(
+              label,
+              style: t.titleMedium?.copyWith(
+                color: selected ? AppColors.primary : null,
               ),
+            ),
+            if (detail != null) ...[
+              const SizedBox(height: 2),
+              Text(detail,
+                  style: t.bodySmall?.copyWith(color: context.mutedColor)),
+            ],
+          ],
         ),
       ),
     );

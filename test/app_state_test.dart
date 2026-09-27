@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quran_learn_app/shared/data/quran_seed.dart';
 import 'package:quran_learn_app/shared/services/app_state.dart';
+import 'package:quran_learn_app/shared/services/store/local_store.dart';
 import 'package:quran_learn_app/shared/services/daily_plan.dart';
 
 String ymd(DateTime d) => '${d.year.toString().padLeft(4, '0')}-'
@@ -35,6 +36,8 @@ void main() {
     appState.activeDates.clear();
     appState.planLog.clear();
     appState.weakSpots.clear();
+    appState.debugClearProgress();
+    appState.learningGoal = AppState.goalShortSurahs;
   });
 
   test('recordSession awards 12 XP per newly held ayah', () {
@@ -85,11 +88,89 @@ void main() {
     expect(appState.isBookmarked(1, 1), isFalse);
   });
 
-  test('isUnlocked only opens a surah once the previous one is sealed', () {
-    expect(appState.isUnlocked(0), isTrue);
-    expect(appState.isUnlocked(1), isFalse);
-    appState.sealed.add(1); // Al-Fatiha's surah number
-    expect(appState.isUnlocked(1), isTrue);
+  Surah surah(int n) => surahs.firstWhere((s) => s.number == n);
+
+  group('welcome screen', () {
+    setUp(() => LocalStore.remove('welcomed'));
+    tearDown(() => appState.signedIn = false);
+
+    test('waits until the account has loaded, then shows once', () {
+      appState.signedIn = true;
+      expect(appState.needsWelcome, isFalse); // progress not pulled yet
+      appState.debugFinishSignIn();
+      expect(appState.needsWelcome, isTrue);
+      appState.markWelcomed();
+      expect(appState.needsWelcome, isFalse);
+    });
+
+    test('a returning learner with progress never sees it', () {
+      appState.debugFinishSignIn();
+      appState.recordSession(
+          surahNumber: 1, heldIndicesNow: {1}, didSeal: false, minutes: 1);
+      expect(appState.needsWelcome, isFalse);
+    });
+  });
+
+  group('learning order', () {
+    test('short surahs first: Al-Fatihah, then An-Nas backward', () {
+      expect(appState.learningPath.map((s) => s.number), [1, 114, 113, 112]);
+      expect(appState.isSurahUnlocked(surah(1)), isTrue);
+      expect(appState.isSurahUnlocked(surah(114)), isFalse);
+      appState.sealed.add(1);
+      expect(appState.isSurahUnlocked(surah(114)), isTrue);
+      expect(appState.nextSurah!.number, 114);
+    });
+
+    test('"from the start" follows the mushaf', () {
+      appState.learningGoal = AppState.goalFromStart;
+      expect(appState.learningPath.map((s) => s.number), [1, 112, 113, 114]);
+      appState.sealed.add(1);
+      expect(appState.nextSurah!.number, 112);
+    });
+
+    test('a surah already under way stays open, and comes first', () {
+      appState.learningGoal = AppState.goalFromStart;
+      appState.sealed.add(1);
+      appState.recordSession(
+          surahNumber: 113, heldIndicesNow: {0}, didSeal: false, minutes: 1);
+      appState.learningGoal = AppState.goalShortSurahs;
+      // 113 comes after 114 in this order, but it's already started.
+      expect(appState.isSurahUnlocked(surah(113)), isTrue);
+      expect(appState.nextSurah!.number, 113);
+    });
+
+    test('surahs already known are skipped and spread into revision', () {
+      appState.markSurahsKnown({1, 114, 113, 112});
+      expect(appState.sealed, containsAll([1, 112, 113, 114]));
+      expect(appState.held[114], surah(114).length);
+      expect(appState.nextSurah, isNull);
+      expect(appState.totalXp, 0); // points are for work done here
+      // Four levels, three a day from tomorrow: none due today.
+      expect(appState.dueForReview, isEmpty);
+      final days = appState.reviewDue.values
+          .map((d) => d.difference(DateTime.now()).inHours ~/ 24)
+          .toList()
+        ..sort();
+      expect(days.where((d) => d == days.first).length, 3);
+      // And they count as old revision once due.
+      final key = appState.levelKey(1, 0);
+      appState.reviewDue[key] =
+          DateTime.now().subtract(const Duration(days: 1));
+      expect(appState.dueFor(PlanStepKind.oldRevision).single.surah.number, 1);
+    });
+
+    test('marking known never overwrites a real review schedule', () {
+      appState.recordSession(
+        surahNumber: 1,
+        heldIndicesNow: {0, 1, 2, 3, 4, 5, 6},
+        didSeal: true,
+        sealedChunk: 0,
+        minutes: 1,
+      );
+      final due = appState.reviewDue[appState.levelKey(1, 0)];
+      appState.markSurahsKnown({1});
+      expect(appState.reviewDue[appState.levelKey(1, 0)], due);
+    });
   });
 
   test(
