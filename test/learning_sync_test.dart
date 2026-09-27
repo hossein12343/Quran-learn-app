@@ -91,6 +91,35 @@ void main() {
     });
   });
 
+  group('practice days', () {
+    test('every day either device practised is kept', () {
+      final merged = LearningState.merge(
+        LearningState(activeDays: {'2026-09-25', '2026-09-27'}),
+        LearningState(activeDays: {'2026-09-26', '2026-09-27'}),
+      );
+      expect(merged.activeDays, {'2026-09-25', '2026-09-26', '2026-09-27'});
+    });
+
+    test('only the most recent days are kept', () {
+      final start = DateTime(2026, 1, 1);
+      final days = {
+        for (var i = 0; i < 200; i++)
+          start.add(Duration(days: i)).toIso8601String().substring(0, 10),
+      };
+      final kept = LearningState(activeDays: days).activeDays;
+      expect(kept.length, LearningState.keepDays);
+      expect(kept, contains('2026-07-19')); // day 200, the latest
+      expect(kept, isNot(contains('2026-01-01')));
+    });
+
+    test('anything that is not a date is ignored', () {
+      final state = LearningState.fromJson({
+        'days': ['2026-09-27', 'yesterday', 5, '2026-9-1'],
+      });
+      expect(state.activeDays, {'2026-09-27'});
+    });
+  });
+
   group('DailyPlanLog.mergeFrom', () {
     test('a later day replaces an earlier one', () {
       final log = DailyPlanLog()..note(PlanStepKind.newLesson, '2026-09-26');

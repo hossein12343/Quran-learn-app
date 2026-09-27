@@ -1200,6 +1200,7 @@ class AppState extends ChangeNotifier {
         weakSpots: weakSpots.toJson(),
         weakSpotsAt: weakSpotsChangedAt,
         planLog: DailyPlanLog()..loadJson(planLog.toJson()),
+        activeDays: {...activeDates},
       );
 
   void _applyLearningState(LearningState state) {
@@ -1222,6 +1223,9 @@ class AppState extends ChangeNotifier {
     weakSpots.loadJson(state.weakSpots);
     weakSpotsChangedAt = state.weakSpotsAt;
     planLog.loadJson(state.planLog.toJson());
+    activeDates
+      ..clear()
+      ..addAll(state.activeDays);
   }
 
   @visibleForTesting

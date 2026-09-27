@@ -49,3 +49,7 @@ where reminder_lat is not null or reminder_lon is not null;
 -- was live: owners no longer read members' profile rows directly.
 drop policy if exists "circle owners can view their members' profiles"
   on public.profiles;
+
+-- Migration `internal_app_stats`: totals-only stats for the owner, in the
+-- `internal` schema the API doesn't expose. See the migration itself for
+-- the full function; run with `select internal.app_stats();`.
