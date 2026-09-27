@@ -510,6 +510,14 @@ class Backend {
   /// stays in [NetException.technicalDetail] for debugging, and the code
   /// lets the sign-in screen act on it (e.g. jump to the code screen for
   /// an unconfirmed email).
+  /// The access token was refused: it ran out (it lasts an hour), or the
+  /// project's signing keys changed. Either way a renewed token fixes it.
+  /// PostgREST answers PGRST303 "JWT expired" or PGRST301 (can't verify);
+  /// the auth server answers `bad_jwt` for both.
+  static bool isStaleToken(NetException e) =>
+      const {'bad_jwt', 'PGRST301', 'PGRST303'}.contains(e.code) ||
+      e.technicalDetail.contains('JWT expired');
+
   static NetException _authException(String body) {
     try {
       final data = jsonDecode(body) as Map<String, dynamic>;
@@ -549,15 +557,18 @@ class Backend {
   /// [NetException.technicalDetail] for actual debugging.
   static NetException _pgException(String body) {
     String detail;
+    String? code;
     try {
       final data = jsonDecode(body) as Map<String, dynamic>;
       detail = data['message']?.toString() ?? body;
+      code = data['code']?.toString();
     } on Object {
       detail = body;
     }
     return NetException(
       'مشکلی در ذخیره اطلاعات پیش آمد. لطفاً دوباره امتحان کنید.',
       technicalDetail: detail,
+      code: code,
     );
   }
 }

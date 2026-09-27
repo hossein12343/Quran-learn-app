@@ -136,14 +136,15 @@ class CirclesState extends ChangeNotifier {
     error = null;
     notifyListeners();
     try {
-      ownedCircle = await Backend.getOwnedCircle(token, uid);
+      ownedCircle = await _authed((t) => Backend.getOwnedCircle(t, uid));
       final owned = ownedCircle;
       members = owned == null
           ? <CircleMember>[]
-          : (await Backend.listCircleMembers(token, owned['id'] as String))
+          : (await _authed(
+                  (t) => Backend.listCircleMembers(t, owned['id'] as String)))
               .map(CircleMember.fromRow)
               .toList();
-      joinedCircles = (await Backend.listJoinedCircles(token, uid))
+      joinedCircles = (await _authed((t) => Backend.listJoinedCircles(t, uid)))
           .where((r) => r['circles'] != null)
           .map(JoinedCircle.fromRow)
           .toList();
@@ -179,12 +180,13 @@ class CirclesState extends ChangeNotifier {
     // error for it.
     for (var attempt = 0; attempt < 3; attempt++) {
       try {
-        ownedCircle = await Backend.createCircle(
-          token,
-          ownerId: uid,
-          name: name,
-          inviteCode: _generateInviteCode(),
-        );
+        final inviteCode = _generateInviteCode();
+        ownedCircle = await _authed((t) => Backend.createCircle(
+              t,
+              ownerId: uid,
+              name: name,
+              inviteCode: inviteCode,
+            ));
         members = <CircleMember>[];
         notifyListeners();
         return;
@@ -198,7 +200,7 @@ class CirclesState extends ChangeNotifier {
     final token = appState.authToken;
     final id = ownedCircleId;
     if (token == null || id == null) return;
-    await Backend.updateCircle(token, id, name: name);
+    await _authed((t) => Backend.updateCircle(t, id, name: name));
     ownedCircle = <String, dynamic>{...?ownedCircle, 'name': name};
     notifyListeners();
   }
@@ -210,7 +212,7 @@ class CirclesState extends ChangeNotifier {
     for (var attempt = 0; attempt < 3; attempt++) {
       final code = _generateInviteCode();
       try {
-        await Backend.updateCircle(token, id, inviteCode: code);
+        await _authed((t) => Backend.updateCircle(t, id, inviteCode: code));
         ownedCircle = <String, dynamic>{...?ownedCircle, 'invite_code': code};
         notifyListeners();
         return;
@@ -224,7 +226,7 @@ class CirclesState extends ChangeNotifier {
     final token = appState.authToken;
     final id = ownedCircleId;
     if (token == null || id == null) return;
-    await Backend.deleteCircle(token, id);
+    await _authed((t) => Backend.deleteCircle(t, id));
     ownedCircle = null;
     members = <CircleMember>[];
     notifyListeners();
@@ -237,8 +239,8 @@ class CirclesState extends ChangeNotifier {
   Future<String?> joinByCode(String code) async {
     final token = appState.authToken;
     if (token == null) return 'not_authenticated';
-    final result =
-        await Backend.joinCircleByCode(token, code.trim().toUpperCase());
+    final result = await _authed(
+        (t) => Backend.joinCircleByCode(t, code.trim().toUpperCase()));
     if (result['ok'] != true) {
       return result['error'] as String? ?? 'unknown';
     }
@@ -252,7 +254,7 @@ class CirclesState extends ChangeNotifier {
     final token = appState.authToken;
     final uid = appState.userId;
     if (token == null || uid == null) return;
-    await Backend.removeCircleMember(token, circleId, uid);
+    await _authed((t) => Backend.removeCircleMember(t, circleId, uid));
     joinedCircles = joinedCircles.where((c) => c.circleId != circleId).toList();
     notifyListeners();
   }
@@ -261,10 +263,15 @@ class CirclesState extends ChangeNotifier {
     final token = appState.authToken;
     final id = ownedCircleId;
     if (token == null || id == null) return;
-    await Backend.removeCircleMember(token, id, userId);
+    await _authed((t) => Backend.removeCircleMember(t, id, userId));
     members = members.where((m) => m.userId != userId).toList();
     notifyListeners();
   }
 }
 
 final circles = CirclesState.instance;
+
+/// Every circles request goes through the app's session, which renews an
+/// expired token and retries (see `AppState.withFreshToken`).
+Future<T> _authed<T>(Future<T> Function(String token) request) =>
+    appState.withFreshToken(request);

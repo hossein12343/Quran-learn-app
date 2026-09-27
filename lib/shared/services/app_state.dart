@@ -593,11 +593,11 @@ class AppState extends ChangeNotifier {
   /// so none of it needs to block navigation the way the actual
   /// credential check does.
   Future<void> _finishSigningIn() async {
-    final token = _authToken;
     final userId = _userId;
-    if (token == null || userId == null) return;
+    if (_authToken == null || userId == null) return;
     try {
-      final profile = await Backend.getProfile(token, userId);
+      final profile =
+          await withFreshToken((token) => Backend.getProfile(token, userId));
       _applyRemoteProfile(profile);
       _reconcileStreakIfBroken();
       // Before surah progress: the exact held ayat saved here are better
@@ -705,11 +705,10 @@ class AppState extends ChangeNotifier {
 
   /// Step 3: sets the new password on the now-signed-in account.
   Future<void> setNewPassword(String password) async {
-    final token = _authToken;
-    if (token == null) {
+    if (_authToken == null) {
       throw const NetException('برای تغییر رمز ابتدا وارد شوید.');
     }
-    await Backend.updatePassword(token, password);
+    await withFreshToken((token) => Backend.updatePassword(token, password));
     pendingPasswordReset = false;
   }
 
@@ -877,15 +876,16 @@ class AppState extends ChangeNotifier {
     required String p256dh,
     required String authKey,
   }) async {
-    if (_authToken == null || _userId == null) return;
+    final userId = _userId;
+    if (_authToken == null || userId == null) return;
     try {
-      await Backend.upsertPushSubscription(
-        _authToken!,
-        _userId!,
-        endpoint: endpoint,
-        p256dh: p256dh,
-        authKey: authKey,
-      );
+      await withFreshToken((token) => Backend.upsertPushSubscription(
+            token,
+            userId,
+            endpoint: endpoint,
+            p256dh: p256dh,
+            authKey: authKey,
+          ));
     } on Object catch (e) {
       AppLog.warn('Push subscription save failed', error: e);
     }
@@ -894,7 +894,8 @@ class AppState extends ChangeNotifier {
   Future<void> removePushSubscription(String endpoint) async {
     if (_authToken == null) return;
     try {
-      await Backend.deletePushSubscription(_authToken!, endpoint);
+      await withFreshToken(
+          (token) => Backend.deletePushSubscription(token, endpoint));
     } on Object catch (e) {
       AppLog.warn('Push subscription remove failed', error: e);
     }
@@ -988,16 +989,20 @@ class AppState extends ChangeNotifier {
       'weekly_xp_base': weeklyXpBase,
       'weekly_xp_week_start': weeklyXpWeekStart,
     });
-    if (_authToken != null && _userId != null) {
-      unawaited(Backend.upsertSurahProgress(
-        _authToken!,
-        _userId!,
-        surah: surahNumber,
-        heldCount: heldIndicesNow.length,
-        sealed: sealed.contains(surahNumber),
-      ).catchError((e) => AppLog.warn(
-          'Progress sync failed for surah $surahNumber',
-          error: e)));
+    final userId = _userId;
+    if (_authToken != null && userId != null) {
+      final heldCount = heldIndicesNow.length;
+      final surahSealed = sealed.contains(surahNumber);
+      unawaited(withFreshToken((token) => Backend.upsertSurahProgress(
+                token,
+                userId,
+                surah: surahNumber,
+                heldCount: heldCount,
+                sealed: surahSealed,
+              ))
+          .catchError((Object e) => AppLog.warn(
+              'Progress sync failed for surah $surahNumber',
+              error: e)));
     }
   }
 
@@ -1012,7 +1017,7 @@ class AppState extends ChangeNotifier {
       _persistSnapshot();
       if (id != null && _authToken != null) {
         try {
-          await Backend.removeBookmark(_authToken!, id);
+          await withFreshToken((token) => Backend.removeBookmark(token, id));
         } on NetException catch (e) {
           // Kept removed locally; will simply re-appear from the server on
           // next successful pull if the delete never landed.
@@ -1025,10 +1030,11 @@ class AppState extends ChangeNotifier {
     bookmarks[key] = null;
     notifyListeners();
     _persistSnapshot();
-    if (_authToken != null && _userId != null) {
+    final userId = _userId;
+    if (_authToken != null && userId != null) {
       try {
-        final id = await Backend.addBookmark(_authToken!, _userId!,
-            surah: surah, ayah: ayah);
+        final id = await withFreshToken((token) =>
+            Backend.addBookmark(token, userId, surah: surah, ayah: ayah));
         bookmarks[key] = id;
         notifyListeners();
         _persistSnapshot();
@@ -1100,11 +1106,10 @@ class AppState extends ChangeNotifier {
   /// is logged, not thrown: the rest of signing in still goes ahead, and
   /// nothing is saved to the account until a later sync succeeds.
   Future<void> _syncLearningState() async {
-    final token = _authToken;
-    if (token == null || _userId == null) return;
+    if (_authToken == null || _userId == null) return;
     try {
-      final remote =
-          LearningState.fromJson(await Backend.getLearningState(token));
+      final remote = LearningState.fromJson(
+          await withFreshToken(Backend.getLearningState));
       _applyLearningState(LearningState.merge(_learningState(), remote));
       _learningStateSynced = true;
       _persistSnapshot();
@@ -1125,37 +1130,62 @@ class AppState extends ChangeNotifier {
     });
   }
 
-  /// The access token only lasts an hour and nothing renews it while the
-  /// app stays open — which a Home Screen app on a phone can do for days.
-  /// So an expired token is renewed once and the save retried.
   Future<void> _saveLearningStateNow() async {
-    Future<void> save() {
-      final token = _authToken, userId = _userId;
-      if (token == null || userId == null || !_learningStateSynced) {
-        return Future.value();
-      }
-      return Backend.saveLearningState(
-          token, userId, _learningState().toJson());
-    }
+    final userId = _userId;
+    if (_authToken == null || userId == null || !_learningStateSynced) return;
+    await withFreshToken((token) =>
+        Backend.saveLearningState(token, userId, _learningState().toJson()));
+  }
 
-    try {
-      await save();
-    } on NetException catch (e) {
-      final refreshToken = _refreshToken;
-      if (refreshToken == null || !e.technicalDetail.contains('JWT expired')) {
-        rethrow;
-      }
-      final session = await Backend.refresh(refreshToken);
-      _authToken = session.accessToken;
-      _refreshToken = session.refreshToken;
-      _persistRefreshToken();
-      await save();
+  /// Runs an account request with the current access token. Tokens only
+  /// last an hour and nothing else renews them while the app stays open —
+  /// which a Home Screen app on a phone can do for days — so every save
+  /// and fetch used to fail quietly after the first hour. An expired token
+  /// is now renewed once and the request retried; requests that expire
+  /// together share that one renewal.
+  Future<T> withFreshToken<T>(Future<T> Function(String token) request) async {
+    final token = _authToken;
+    if (token == null) {
+      throw const NetException('برای این کار ابتدا وارد شوید.');
     }
+    try {
+      return await request(token);
+    } on NetException catch (e) {
+      if (!Backend.isStaleToken(e) || _refreshToken == null) rethrow;
+      // Another request may have renewed it while this one was in flight.
+      if (_authToken == token) {
+        await (_renewing ??=
+            _renewToken().whenComplete(() => _renewing = null));
+      }
+      final fresh = _authToken;
+      if (fresh == null) rethrow;
+      return request(fresh);
+    }
+  }
+
+  Future<void>? _renewing;
+
+  /// How a token is renewed — swapped out in tests.
+  @visibleForTesting
+  Future<AuthSession> Function(String refreshToken) renewSession =
+      Backend.refresh;
+
+  @visibleForTesting
+  void debugSetTokens(String? accessToken, String? refreshToken) {
+    _authToken = accessToken;
+    _refreshToken = refreshToken;
+  }
+
+  Future<void> _renewToken() async {
+    final session = await renewSession(_refreshToken!);
+    _authToken = session.accessToken;
+    _refreshToken = session.refreshToken;
+    _persistRefreshToken();
   }
 
   Future<void> _pullSurahProgress() async {
     if (_authToken == null) return;
-    final rows = await Backend.listSurahProgress(_authToken!);
+    final rows = await withFreshToken(Backend.listSurahProgress);
     for (final r in rows) {
       final surah = (r['surah'] as num).toInt();
       final heldCount = (r['held_count'] as num?)?.toInt() ?? 0;
@@ -1173,7 +1203,7 @@ class AppState extends ChangeNotifier {
 
   Future<void> _pullBookmarks() async {
     if (_authToken == null) return;
-    final rows = await Backend.listBookmarks(_authToken!);
+    final rows = await withFreshToken(Backend.listBookmarks);
     bookmarks.clear();
     for (final r in rows) {
       bookmarks['${r['surah']}:${r['ayah']}'] = r['id'] as String;
@@ -1182,10 +1212,12 @@ class AppState extends ChangeNotifier {
   }
 
   void _pushProfileFields(Map<String, dynamic> fields) {
-    if (_authToken == null || _userId == null) return;
+    final userId = _userId;
+    if (_authToken == null || userId == null) return;
     unawaited(
-      Backend.updateProfile(_authToken!, _userId!, fields).catchError(
-          (e) => AppLog.warn('Profile field push failed', error: e, context: {
+      withFreshToken((token) => Backend.updateProfile(token, userId, fields))
+          .catchError((e) =>
+              AppLog.warn('Profile field push failed', error: e, context: {
                 'fields': fields.keys.join(','),
               })),
     );
