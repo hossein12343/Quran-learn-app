@@ -166,6 +166,22 @@ void main() {
     expect(appState.dueForReview, isEmpty); // not due until tomorrow
   });
 
+  test("signing out clears this account's progress from the device", () {
+    appState.recordSession(
+      surahNumber: 1,
+      heldIndicesNow: {0, 1, 2, 3, 4, 5, 6},
+      didSeal: true,
+      sealedChunk: 0,
+      minutes: 1,
+    );
+    appState.recordWeakSpots(1, 1, missed: [0]);
+    appState.signOut();
+    expect(appState.sealedLevels, isEmpty);
+    expect(appState.reviewDue, isEmpty);
+    expect(appState.held, isEmpty);
+    expect(appState.weakSpots.isEmpty, isTrue);
+  });
+
   group("today's plan", () {
     PlanStep step(PlanStepKind kind) =>
         appState.todayPlan.firstWhere((s) => s.kind == kind);

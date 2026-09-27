@@ -254,6 +254,37 @@ class Backend {
     if (!res.ok) throw _pgException(res.body);
   }
 
+  /// The account's saved memorisation state (see `LearningState`), or null
+  /// if it has never been saved.
+  static Future<Object?> getLearningState(String token) async {
+    final res = await Net.request(
+      'GET',
+      '$baseUrl/rest/v1/learning_state?select=data',
+      headers: _headers(token),
+    );
+    if (!res.ok) throw _pgException(res.body);
+    final rows = jsonDecode(res.body) as List;
+    return rows.isEmpty ? null : (rows.first as Map)['data'];
+  }
+
+  static Future<void> saveLearningState(
+      String token, String userId, Map<String, dynamic> data) async {
+    final res = await Net.request(
+      'POST',
+      '$baseUrl/rest/v1/learning_state?on_conflict=user_id',
+      headers: {
+        ..._headers(token),
+        'Prefer': 'resolution=merge-duplicates,return=minimal',
+      },
+      body: {
+        'user_id': userId,
+        'data': data,
+        'updated_at': DateTime.now().toUtc().toIso8601String(),
+      },
+    );
+    if (!res.ok) throw _pgException(res.body);
+  }
+
   // ------------------------------------------------------------- bookmarks
 
   static Future<List<Map<String, dynamic>>> listBookmarks(String token) async {

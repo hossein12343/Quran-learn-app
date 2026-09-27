@@ -39,6 +39,26 @@ class DailyPlanLog {
     _counts.clear();
   }
 
+  /// Two devices' logs as one: the later day wins outright; on the same
+  /// day each step keeps the higher count (the same work isn't counted
+  /// twice, and nothing done on either device is lost).
+  void mergeFrom(DailyPlanLog other) {
+    final theirs = other.day;
+    if (theirs == null) return;
+    final mine = day;
+    if (mine == null || theirs.compareTo(mine) > 0) {
+      day = theirs;
+      _counts
+        ..clear()
+        ..addAll(other._counts);
+      return;
+    }
+    if (theirs != mine) return;
+    other._counts.forEach((kind, n) {
+      if (n > (_counts[kind] ?? 0)) _counts[kind] = n;
+    });
+  }
+
   Map<String, dynamic> toJson() => {
         'day': day,
         for (final e in _counts.entries) e.key.name: e.value,

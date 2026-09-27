@@ -5,6 +5,7 @@ import '../data/quran_seed.dart';
 import 'app_log.dart';
 import 'backend.dart';
 import 'daily_plan.dart';
+import 'learning_sync.dart';
 import 'net/net.dart';
 import 'oauth/web_nav.dart';
 import 'store/local_store.dart';
@@ -174,6 +175,10 @@ class AppState extends ChangeNotifier {
   /// like the review schedule above.
   final WeakSpots weakSpots = WeakSpots();
 
+  /// When [weakSpots] last changed — decides which device's list wins when
+  /// two are merged (see [LearningState.merge]).
+  DateTime? weakSpotsChangedAt;
+
   /// Records what one drill answer showed: [missed] and [right] are word
   /// positions in that ayah, or [WeakSpot.wholeAyah].
   void recordWeakSpots(int surah, int ayah,
@@ -185,8 +190,10 @@ class AppState extends ChangeNotifier {
     for (final w in right) {
       weakSpots.answeredRight(surah, ayah, w);
     }
+    weakSpotsChangedAt = DateTime.now();
     notifyListeners();
     _persistSnapshot();
+    _scheduleLearningSave();
   }
 
   /// What's been done toward [todayPlan] today. Device-only, like the
@@ -225,6 +232,7 @@ class AppState extends ChangeNotifier {
     planLog.note(PlanStepKind.weakWords, _todayKey());
     notifyListeners();
     _persistSnapshot();
+    _scheduleLearningSave();
   }
 
   ReviewState _reviewStateFor(int key) {
@@ -377,6 +385,9 @@ class AppState extends ChangeNotifier {
   final Map<String, String?> bookmarks = <String, String?>{};
 
   String? _userId;
+
+  /// The account whose progress this device's saved state holds.
+  String? _snapshotOwner;
   String? _authToken;
   String? _refreshToken;
   bool syncing = false;
@@ -555,6 +566,12 @@ class AppState extends ChangeNotifier {
   /// the actual security check; nothing after that needs to finish before
   /// the UI can move on.
   void _adoptSession(AuthSession session) {
+    // Learning state saved here by a different account stays with that
+    // account — it must not be merged into this one.
+    if (_snapshotOwner != null && _snapshotOwner != session.userId) {
+      _clearLearningState();
+    }
+    _snapshotOwner = session.userId;
     _authToken = session.accessToken;
     _refreshToken = session.refreshToken;
     _userId = session.userId;
@@ -583,6 +600,9 @@ class AppState extends ChangeNotifier {
       final profile = await Backend.getProfile(token, userId);
       _applyRemoteProfile(profile);
       _reconcileStreakIfBroken();
+      // Before surah progress: the exact held ayat saved here are better
+      // than the per-surah counts that fills in.
+      await _syncLearningState();
       await _pullSurahProgress();
       await _pullBookmarks();
       syncNotice = null;
@@ -776,6 +796,10 @@ class AppState extends ChangeNotifier {
     _authToken = null;
     _refreshToken = null;
     _userId = null;
+    // Otherwise the next account to sign in on this device would have this
+    // one's progress merged into it.
+    _clearLearningState();
+    _snapshotOwner = null;
     LocalStore.remove('session');
     LocalStore.remove(_kRefreshTokenKey);
     notifyListeners();
@@ -953,6 +977,7 @@ class AppState extends ChangeNotifier {
     _touchStreakForToday();
     notifyListeners();
     _persistSnapshot();
+    _scheduleLearningSave();
 
     _pushProfileFields({
       'total_xp': totalXp,
@@ -1016,16 +1041,131 @@ class AppState extends ChangeNotifier {
 
   // -------------------------------------------------------------- backend
 
+  /// True once this session has merged in the account's learning state.
+  /// Until then nothing is saved to it: a fresh device (or one Safari has
+  /// just wiped) would otherwise overwrite months of reviews with nothing.
+  bool _learningStateSynced = false;
+  Timer? _learningSaveTimer;
+
+  LearningState _learningState() => LearningState(
+        sealedLevels: {...sealedLevels},
+        reviews: {
+          for (final key in reviewDue.keys)
+            key: LevelReview(
+              due: reviewDue[key]!,
+              reps: reviewCleanRecalls[key] ?? 0,
+              ease: reviewEase[key] ?? ReviewSchedule.startEase,
+              gapDays: _reviewStateFor(key).intervalDays,
+            ),
+        },
+        held: {
+          for (final e in _heldAyat.entries) e.key: {...e.value}
+        },
+        weakSpots: weakSpots.toJson(),
+        weakSpotsAt: weakSpotsChangedAt,
+        planLog: DailyPlanLog()..loadJson(planLog.toJson()),
+      );
+
+  void _applyLearningState(LearningState state) {
+    sealedLevels
+      ..clear()
+      ..addAll(state.sealedLevels);
+    reviewDue.clear();
+    reviewCleanRecalls.clear();
+    reviewEase.clear();
+    reviewInterval.clear();
+    state.reviews.forEach((key, r) {
+      reviewDue[key] = r.due;
+      reviewCleanRecalls[key] = r.reps;
+      reviewEase[key] = r.ease;
+      reviewInterval[key] = r.gapDays;
+    });
+    _heldAyat
+      ..clear()
+      ..addAll(state.held);
+    weakSpots.loadJson(state.weakSpots);
+    weakSpotsChangedAt = state.weakSpotsAt;
+    planLog.loadJson(state.planLog.toJson());
+  }
+
+  void _clearLearningState() {
+    _learningSaveTimer?.cancel();
+    _learningStateSynced = false;
+    _applyLearningState(LearningState());
+    sealed.clear();
+  }
+
+  /// Merges the account's saved learning state with this device's, then
+  /// saves the result back so each side ends up with everything. A failure
+  /// is logged, not thrown: the rest of signing in still goes ahead, and
+  /// nothing is saved to the account until a later sync succeeds.
+  Future<void> _syncLearningState() async {
+    final token = _authToken;
+    if (token == null || _userId == null) return;
+    try {
+      final remote =
+          LearningState.fromJson(await Backend.getLearningState(token));
+      _applyLearningState(LearningState.merge(_learningState(), remote));
+      _learningStateSynced = true;
+      _persistSnapshot();
+      notifyListeners();
+      await _saveLearningStateNow();
+    } on NetException catch (e) {
+      AppLog.warn('Learning state sync failed', error: e);
+    }
+  }
+
+  /// Saves shortly after a change, so a burst of answers is one request.
+  void _scheduleLearningSave() {
+    if (!_learningStateSynced) return;
+    _learningSaveTimer?.cancel();
+    _learningSaveTimer = Timer(const Duration(seconds: 2), () {
+      unawaited(_saveLearningStateNow().catchError(
+          (Object e) => AppLog.warn('Learning state save failed', error: e)));
+    });
+  }
+
+  /// The access token only lasts an hour and nothing renews it while the
+  /// app stays open — which a Home Screen app on a phone can do for days.
+  /// So an expired token is renewed once and the save retried.
+  Future<void> _saveLearningStateNow() async {
+    Future<void> save() {
+      final token = _authToken, userId = _userId;
+      if (token == null || userId == null || !_learningStateSynced) {
+        return Future.value();
+      }
+      return Backend.saveLearningState(
+          token, userId, _learningState().toJson());
+    }
+
+    try {
+      await save();
+    } on NetException catch (e) {
+      final refreshToken = _refreshToken;
+      if (refreshToken == null || !e.technicalDetail.contains('JWT expired')) {
+        rethrow;
+      }
+      final session = await Backend.refresh(refreshToken);
+      _authToken = session.accessToken;
+      _refreshToken = session.refreshToken;
+      _persistRefreshToken();
+      await save();
+    }
+  }
+
   Future<void> _pullSurahProgress() async {
     if (_authToken == null) return;
     final rows = await Backend.listSurahProgress(_authToken!);
     for (final r in rows) {
       final surah = (r['surah'] as num).toInt();
       final heldCount = (r['held_count'] as num?)?.toInt() ?? 0;
-      // The server only stores how many ayat are held, not which ones —
-      // approximate with the first N until a real session on this device
-      // supplies the exact set again.
-      _heldAyat[surah] = Set<int>.from(List<int>.generate(heldCount, (i) => i));
+      // Only a count is stored here, not which ayat — so it only fills in
+      // (approximated as the first N) when this device knows of fewer.
+      // The exact sets come from the learning state, pulled just before.
+      if ((_heldAyat[surah]?.length ?? 0) < heldCount) {
+        _heldAyat[surah] =
+            Set<int>.from(List<int>.generate(heldCount, (i) => i));
+      }
       if (r['sealed'] == true) sealed.add(surah);
     }
     _persistSnapshot();
@@ -1111,6 +1251,11 @@ class AppState extends ChangeNotifier {
       'lastCelebratedStreakMilestone': lastCelebratedStreakMilestone,
       'weakSpots': weakSpots.toJson(),
       'planLog': planLog.toJson(),
+      if (weakSpotsChangedAt != null)
+        'weakSpotsAt': weakSpotsChangedAt!.toIso8601String(),
+      // Which account this progress belongs to (an id, not a credential).
+      if ((_userId ?? _snapshotOwner) != null)
+        'owner': _userId ?? _snapshotOwner,
       // Never persist bearer credentials. Web localStorage and the desktop
       // JSON store are not credential vaults; persistence turns an XSS or
       // local-file exposure into a long-lived account takeover.
@@ -1121,6 +1266,8 @@ class AppState extends ChangeNotifier {
   void _applySnapshot(Map<String, dynamic> snap) {
     weakSpots.loadJson(snap['weakSpots']);
     planLog.loadJson(snap['planLog']);
+    weakSpotsChangedAt = DateTime.tryParse('${snap['weakSpotsAt']}');
+    _snapshotOwner = snap['owner'] as String?;
     displayName = snap['displayName'] as String? ?? displayName;
     email = snap['email'] as String? ?? email;
     totalXp = (snap['totalXp'] as num?)?.toInt() ?? totalXp;
