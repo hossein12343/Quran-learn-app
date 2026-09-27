@@ -3,6 +3,8 @@ import '../../core/motion/motion.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/pattern_overlay.dart';
 import '../../shared/services/app_state.dart';
+import '../../shared/services/net/net.dart';
+import '../../shared/services/oauth/web_nav.dart';
 import '../learn/hifz_plan_page.dart';
 import '../learn/memorized_page.dart';
 import '../progress/achievements_page.dart';
@@ -237,9 +239,42 @@ class ProfilePage extends StatelessWidget {
               ),
             ),
           ),
+          const SizedBox(height: AppSpacing.md),
+          Reveal(
+            index: 5,
+            child: Wrap(
+              alignment: WrapAlignment.center,
+              children: [
+                TextButton(
+                  onPressed: () => WebNav.openPage('/privacy.html'),
+                  child: Text('حریم خصوصی',
+                      style: TextStyle(color: context.mutedColor)),
+                ),
+                if (appState.hasSyncedAccount)
+                  TextButton(
+                    onPressed: () => _confirmDeleteAccount(context),
+                    child: Text('حذف حساب',
+                        style: TextStyle(color: context.mutedColor)),
+                  ),
+              ],
+            ),
+          ),
         ],
       ),
     );
+  }
+
+  /// Deleting is permanent and takes everything with it, so it asks first
+  /// and says exactly what goes; on success it lands on the sign-in page.
+  Future<void> _confirmDeleteAccount(BuildContext context) async {
+    final navigator = Navigator.of(context);
+    final deleted = await showDialog<bool>(
+      context: context,
+      builder: (context) => const _DeleteAccountDialog(),
+    );
+    if (deleted == true) {
+      navigator.pushNamedAndRemoveUntil('/login', (route) => false);
+    }
   }
 
   Widget _section(BuildContext context, String title, List<Widget> children) {
@@ -418,6 +453,75 @@ class ProfilePage extends StatelessWidget {
           Text(value, style: Theme.of(context).textTheme.labelLarge),
         ],
       ),
+    );
+  }
+}
+
+class _DeleteAccountDialog extends StatefulWidget {
+  const _DeleteAccountDialog();
+
+  @override
+  State<_DeleteAccountDialog> createState() => _DeleteAccountDialogState();
+}
+
+class _DeleteAccountDialogState extends State<_DeleteAccountDialog> {
+  bool _busy = false;
+  String? _error;
+
+  Future<void> _delete() async {
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      await appState.deleteAccount();
+      if (mounted) Navigator.of(context).pop(true);
+    } on NetException catch (e) {
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _error = e.message;
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('حساب حذف شود؟'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'حساب شما و هرچه با آن ذخیره شده برای همیشه پاک می‌شود: '
+            'پیشرفت حفظ و برنامهٔ مرور، نشانک‌ها، امتیاز و روند، یادآورها '
+            'و حلقه‌ای که ساخته‌اید. این کار برگشت‌پذیر نیست.',
+          ),
+          if (_error != null) ...[
+            const SizedBox(height: AppSpacing.md),
+            Text(_error!, style: const TextStyle(color: AppColors.error)),
+          ],
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: _busy ? null : () => Navigator.of(context).pop(false),
+          child: const Text('انصراف'),
+        ),
+        TextButton(
+          onPressed: _busy ? null : _delete,
+          child: _busy
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2))
+              : const Text('حذف همیشگی',
+                  style: TextStyle(
+                      color: AppColors.error, fontWeight: FontWeight.w700)),
+        ),
+      ],
     );
   }
 }

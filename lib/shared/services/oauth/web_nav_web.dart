@@ -64,6 +64,12 @@ class WebNav {
   /// with `null` here surfaced a real uncaught null-check exception right
   /// as Home first rendered after Google sign-in — this is where it was
   /// coming from. Keeping the current state object clears only the URL.
+  /// Opens one of the site's own plain pages (like `/privacy.html`) in a
+  /// new tab, leaving the app where it was.
+  static void openPage(String path) {
+    html.window.open(Uri.base.resolve(path).toString(), '_blank');
+  }
+
   static void clearQuery() {
     _capturedFragment = null;
     html.window.history

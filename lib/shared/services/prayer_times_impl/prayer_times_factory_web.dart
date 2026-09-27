@@ -65,12 +65,20 @@ class WebPrayerTimesService implements PrayerTimesService {
   /// (latitude, longitude) — from a cached previous lookup if there is one
   /// (avoids re-prompting for location permission every day), else a fresh
   /// `getCurrentPosition()` call, cached on success.
+  ///
+  /// Rounded to two decimals (about 1 km) before anything else sees it:
+  /// prayer times and the qibla bearing don't change over that distance,
+  /// and it's all that goes to the prayer-times service or the reminder
+  /// settings saved on the account — a town, not a doorstep.
   @override
   Future<(double, double)?> resolveLocation() async {
     final cachedLat = LocalStore.get(_latKey);
     final cachedLon = LocalStore.get(_lonKey);
     if (cachedLat != null && cachedLon != null) {
-      return (double.parse(cachedLat), double.parse(cachedLon));
+      return (
+        _coarse(double.parse(cachedLat)),
+        _coarse(double.parse(cachedLon))
+      );
     }
     try {
       final geolocation = html.window.navigator.geolocation;
@@ -78,9 +86,10 @@ class WebPrayerTimesService implements PrayerTimesService {
         enableHighAccuracy: false,
         timeout: const Duration(seconds: 8),
       );
-      final lat = pos.coords?.latitude?.toDouble();
-      final lon = pos.coords?.longitude?.toDouble();
-      if (lat == null || lon == null) return null;
+      final rawLat = pos.coords?.latitude?.toDouble();
+      final rawLon = pos.coords?.longitude?.toDouble();
+      if (rawLat == null || rawLon == null) return null;
+      final lat = _coarse(rawLat), lon = _coarse(rawLon);
       LocalStore.set(_latKey, lat.toString());
       LocalStore.set(_lonKey, lon.toString());
       return (lat, lon);
@@ -90,3 +99,5 @@ class WebPrayerTimesService implements PrayerTimesService {
     }
   }
 }
+
+double _coarse(double degrees) => (degrees * 100).round() / 100;

@@ -7,5 +7,6 @@ class WebNav {
   static String? fragmentParam(String key) => null;
   static bool get hasOAuthCallback => false;
   static void redirectTo(String url) {}
+  static void openPage(String path) {}
   static void clearQuery() {}
 }

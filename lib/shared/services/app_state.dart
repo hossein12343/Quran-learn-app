@@ -804,6 +804,15 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Deletes the account on the server — progress, bookmarks, circles,
+  /// reminders, everything — then signs this device out. Throws
+  /// [NetException] if the server couldn't be reached, leaving the
+  /// account as it was.
+  Future<void> deleteAccount() async {
+    await withFreshToken(Backend.deleteOwnAccount);
+    signOut();
+  }
+
   /// The name shown around the app, editable from Profile.
   void setDisplayName(String name) {
     final n = name.trim();

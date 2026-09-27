@@ -10,6 +10,7 @@ import '../../shared/services/app_state.dart';
 import '../../shared/services/backend.dart';
 import '../../shared/services/captcha.dart';
 import '../../shared/services/net/net.dart';
+import '../../shared/services/oauth/web_nav.dart';
 
 /// The origin (`https://host/`) this page is running at — what OAuth
 /// providers redirect back to. Built from `Uri.origin` rather than
@@ -723,6 +724,22 @@ class _AuthPageState extends State<AuthPage> {
         ),
         const SizedBox(height: AppSpacing.lg),
         BigButton(label: label, onTap: _busy || waiting ? null : _submit),
+        const SizedBox(height: AppSpacing.md),
+        // Signing in with Google creates an account too, so this shows in
+        // both modes.
+        Center(
+          child: TextButton(
+            onPressed: () => WebNav.openPage('/privacy.html'),
+            child: Text(
+              'با ادامه، سیاست حریم خصوصی را می‌پذیرید.',
+              textAlign: TextAlign.center,
+              style: t.bodySmall?.copyWith(
+                color: context.mutedColor,
+                decoration: TextDecoration.underline,
+              ),
+            ),
+          ),
+        ),
       ],
     );
   }

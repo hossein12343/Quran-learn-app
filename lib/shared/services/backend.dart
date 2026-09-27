@@ -285,6 +285,18 @@ class Backend {
     if (!res.ok) throw _pgException(res.body);
   }
 
+  /// Permanently deletes the signed-in account and everything stored with
+  /// it (every table cascades from the account).
+  static Future<void> deleteOwnAccount(String token) async {
+    final res = await Net.request(
+      'POST',
+      '$baseUrl/rest/v1/rpc/delete_own_account',
+      headers: _headers(token),
+      body: const <String, dynamic>{},
+    );
+    if (!res.ok) throw _pgException(res.body);
+  }
+
   // ------------------------------------------------------------- bookmarks
 
   static Future<List<Map<String, dynamic>>> listBookmarks(String token) async {
@@ -429,17 +441,35 @@ class Backend {
   /// `profiles(id)` directly (see the migration).
   static Future<List<Map<String, dynamic>>> listCircleMembers(
       String token, String circleId) async {
+    // Through a function that returns only what the owner's dashboard
+    // shows. Reading members' profile rows directly used to hand the owner
+    // the whole row — including a member's saved location and reminder
+    // times. Reshaped to the `{user_id, joined_at, profiles: {...}}` rows
+    // `CircleMember.fromRow` has always read.
     final res = await Net.request(
-      'GET',
-      '$baseUrl/rest/v1/circle_members?circle_id=eq.$circleId'
-          '&select=user_id,joined_at,profiles(display_name,total_xp,'
-          'current_streak,longest_streak,last_active_date,is_pro,'
-          'weekly_xp_base,weekly_xp_week_start)',
+      'POST',
+      '$baseUrl/rest/v1/rpc/circle_member_profiles',
       headers: _headers(token),
+      body: {'p_circle_id': circleId},
     );
     if (!res.ok) throw _pgException(res.body);
-    return (jsonDecode(res.body) as List).cast<Map<String, dynamic>>();
+    return memberRowsFromFunction(jsonDecode(res.body) as List);
   }
+
+  /// `circle_member_profiles`' flat rows, in the nested shape
+  /// `CircleMember.fromRow` reads.
+  static List<Map<String, dynamic>> memberRowsFromFunction(List rows) => [
+        for (final row in rows.cast<Map>())
+          <String, dynamic>{
+            'user_id': row['user_id'],
+            'joined_at': row['joined_at'],
+            'profiles': <String, dynamic>{
+              for (final e in row.entries)
+                if (e.key != 'user_id' && e.key != 'joined_at')
+                  '${e.key}': e.value,
+            },
+          },
+      ];
 
   /// Circles the caller has joined as a member (not owns) — for the "I'm
   /// part of these" list, and for leaving one. The explicit `user_id`

@@ -10,7 +10,12 @@
 {{flutter_js}}
 {{flutter_build_config}}
 _flutter.loader.load({
-  config: {},
+  config: {
+    // The graphics engine from this site rather than Google's CDN (the
+    // default): one fewer outside service seeing every visitor, and no
+    // dependence on gstatic.com being reachable (it isn't everywhere).
+    canvasKitBaseUrl: "canvaskit/",
+  },
 });
 
 if ('serviceWorker' in navigator) {

@@ -1,8 +1,34 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:quran_learn_app/shared/services/backend.dart';
 import 'package:quran_learn_app/shared/services/circles.dart';
 
 void main() {
   group('CircleMember.fromRow', () {
+    test("reads the owner's view of members, which is all the server gives",
+        () {
+      final rows = Backend.memberRowsFromFunction([
+        {
+          'user_id': 'u1',
+          'joined_at': '2026-09-20T10:00:00Z',
+          'display_name': 'Zahra',
+          'total_xp': 420,
+          'current_streak': 5,
+          'longest_streak': 9,
+          'last_active_date': '2026-09-27',
+          'is_pro': false,
+          'weekly_xp_base': 300,
+          'weekly_xp_week_start': '2026-09-26',
+        },
+      ]);
+      final m = CircleMember.fromRow(rows.single);
+      expect(m.userId, 'u1');
+      expect(m.displayName, 'Zahra');
+      expect(m.totalXp, 420);
+      expect(m.currentStreak, 5);
+      expect(m.longestStreak, 9);
+      expect(m.weeklyXpBase, 300);
+    });
+
     test(
         'reads profile fields and computes the same level formula as '
         'AppState', () {
