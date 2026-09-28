@@ -40,10 +40,19 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-function store(req, res) {
+// Saving runs alongside handing the response to the page. waitUntil keeps
+// the worker alive until the copy is saved: without it the browser may stop
+// an idle-looking worker partway through a large file (the 5 MB graphics
+// engine), which would lose the copy.
+function store(event, req, res) {
   if (res && res.status === 200 && res.type === 'basic') {
     const copy = res.clone();
-    caches.open(APP_CACHE).then((cache) => cache.put(req, copy));
+    event.waitUntil(
+      caches
+        .open(APP_CACHE)
+        .then((cache) => cache.put(req, copy))
+        .catch(() => {}),
+    );
   }
   return res;
 }
@@ -51,7 +60,7 @@ function store(req, res) {
 // Opening the app (a navigation) asks the network first, so a new release
 // is seen straight away, but gives up after a few seconds on a bad
 // connection and uses the saved copy.
-async function navigate(req) {
+async function navigate(event, req) {
   const cache = await caches.open(APP_CACHE);
   // Every app route (/, /home, /login, …) is the same page; the site's
   // own documents (privacy.html, eula.html) are saved under their own name.
@@ -59,12 +68,14 @@ async function navigate(req) {
   const key = path.endsWith('.html') && !path.endsWith('/index.html')
     ? req
     : '/';
-  const network = fetch(req).then((res) => {
-    if (res && res.ok) cache.put(key, res.clone());
-    return res;
-  });
-  // A late failure after the timeout is expected offline; don't report it.
-  network.catch(() => {});
+  const network = fetch(req);
+  // Registered before the page is answered, so the worker stays alive to
+  // save a response that only arrives after the saved copy was used.
+  event.waitUntil(
+    network
+      .then((res) => (res && res.ok ? cache.put(key, res.clone()) : null))
+      .catch(() => {}),
+  );
   const timeout = new Promise((resolve) => setTimeout(resolve, 3000));
   try {
     const res = await Promise.race([network, timeout]);
@@ -80,17 +91,17 @@ async function navigate(req) {
 // only changes with a new build, so within a build it comes straight from
 // the saved copy. Asking the server first cost a round trip for every
 // file on every open (about 7 in a row before the app could start).
-async function fromCache(req) {
+async function fromCache(event, req) {
   const saved = await caches.match(req, { cacheName: APP_CACHE });
   if (saved) return saved;
-  return store(req, await fetch(req));
+  return store(event, req, await fetch(req));
 }
 
 // The old behaviour, kept for a build that wasn't stamped: always correct,
 // just slower.
-async function networkFirst(req) {
+async function networkFirst(event, req) {
   try {
-    return store(req, await fetch(req));
+    return store(event, req, await fetch(req));
   } catch (err) {
     const saved = await caches.match(req);
     if (saved) return saved;
@@ -114,10 +125,10 @@ self.addEventListener('fetch', (event) => {
   if (url.pathname.endsWith('app_cache_sw.js')) return;
 
   if (!STAMPED) {
-    event.respondWith(networkFirst(req));
+    event.respondWith(networkFirst(event, req));
   } else if (req.mode === 'navigate') {
-    event.respondWith(navigate(req));
+    event.respondWith(navigate(event, req));
   } else {
-    event.respondWith(fromCache(req));
+    event.respondWith(fromCache(event, req));
   }
 });
