@@ -57,9 +57,11 @@ function store(event, req, res) {
   return res;
 }
 
-// Opening the app (a navigation) asks the network first, so a new release
-// is seen straight away, but gives up after a few seconds on a bad
-// connection and uses the saved copy.
+// Opening the app (a navigation) is answered from the saved copy too. It
+// used to ask the network first, with a 3 s limit — on a throttled
+// connection every open then waited the full 3 s. It doesn't need to: a
+// new release changes this worker, the browser checks for that on its own
+// in the background, and the new worker brings a fresh copy.
 async function navigate(event, req) {
   const cache = await caches.open(APP_CACHE);
   // Every app route (/, /home, /login, …) is the same page; the site's
@@ -68,26 +70,13 @@ async function navigate(event, req) {
   const key = path.endsWith('.html') && !path.endsWith('/index.html')
     ? req
     : '/';
-  const network = fetch(req);
-  // Registered before the page is answered, so the worker stays alive to
-  // save a response that only arrives after the saved copy was used.
-  event.waitUntil(
-    network
-      .then((res) => (res && res.ok ? cache.put(key, res.clone()) : null))
-      .catch(() => {}),
-  );
-  const timeout = new Promise((resolve) => setTimeout(resolve, 3000));
-  let answer = null;
-  try {
-    answer = await Promise.race([network, timeout]);
-    if (answer && answer.ok) return answer;
-  } catch (_) {
-    // Offline — fall through to the saved copy.
-  }
-  // Slow, offline, or an error page from the server: the saved copy is
-  // the better answer when there is one.
   const saved = await cache.match(key);
-  return saved || answer || network;
+  if (saved) return saved;
+  const res = await fetch(req, { cache: 'no-cache' });
+  if (res && res.ok) {
+    event.waitUntil(cache.put(key, res.clone()).catch(() => {}));
+  }
+  return res;
 }
 
 // Everything else — app code, the graphics engine, fonts, the Quran text —
