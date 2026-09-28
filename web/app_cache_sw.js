@@ -77,14 +77,17 @@ async function navigate(event, req) {
       .catch(() => {}),
   );
   const timeout = new Promise((resolve) => setTimeout(resolve, 3000));
+  let answer = null;
   try {
-    const res = await Promise.race([network, timeout]);
-    if (res) return res;
+    answer = await Promise.race([network, timeout]);
+    if (answer && answer.ok) return answer;
   } catch (_) {
     // Offline — fall through to the saved copy.
   }
+  // Slow, offline, or an error page from the server: the saved copy is
+  // the better answer when there is one.
   const saved = await cache.match(key);
-  return saved || network;
+  return saved || answer || network;
 }
 
 // Everything else — app code, the graphics engine, fonts, the Quran text —
@@ -94,7 +97,10 @@ async function navigate(event, req) {
 async function fromCache(event, req) {
   const saved = await caches.match(req, { cacheName: APP_CACHE });
   if (saved) return saved;
-  return store(event, req, await fetch(req));
+  // Checked with the server (`no-cache`), never taken from the browser's
+  // own HTTP cache unchecked: that could hold a file from the previous
+  // build and save it into this build's copy.
+  return store(event, req, await fetch(req, { cache: 'no-cache' }));
 }
 
 // The old behaviour, kept for a build that wasn't stamped: always correct,

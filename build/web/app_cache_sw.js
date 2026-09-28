@@ -12,7 +12,7 @@
 // Replaced with a hash of the build by tools/build_web.py. Each build gets
 // its own cache, so files from two builds are never mixed; a new build
 // changes this file, which is how the browser notices there's an update.
-const BUILD = 'cb41c2e96176';
+const BUILD = 'a5d5b86113f4';
 const STAMPED = !BUILD.startsWith('__');
 const APP_CACHE = 'ql-app-' + BUILD;
 // Only this worker's own caches are ever cleared — never others, such as
@@ -77,14 +77,17 @@ async function navigate(event, req) {
       .catch(() => {}),
   );
   const timeout = new Promise((resolve) => setTimeout(resolve, 3000));
+  let answer = null;
   try {
-    const res = await Promise.race([network, timeout]);
-    if (res) return res;
+    answer = await Promise.race([network, timeout]);
+    if (answer && answer.ok) return answer;
   } catch (_) {
     // Offline — fall through to the saved copy.
   }
+  // Slow, offline, or an error page from the server: the saved copy is
+  // the better answer when there is one.
   const saved = await cache.match(key);
-  return saved || network;
+  return saved || answer || network;
 }
 
 // Everything else — app code, the graphics engine, fonts, the Quran text —
@@ -94,7 +97,10 @@ async function navigate(event, req) {
 async function fromCache(event, req) {
   const saved = await caches.match(req, { cacheName: APP_CACHE });
   if (saved) return saved;
-  return store(event, req, await fetch(req));
+  // Checked with the server (`no-cache`), never taken from the browser's
+  // own HTTP cache unchecked: that could hold a file from the previous
+  // build and save it into this build's copy.
+  return store(event, req, await fetch(req, { cache: 'no-cache' }));
 }
 
 // The old behaviour, kept for a build that wasn't stamped: always correct,
