@@ -456,18 +456,26 @@ class AppState extends ChangeNotifier {
   }
 
   /// Any ayah held or level sealed in it.
-  bool hasStarted(Surah s) =>
-      (_heldAyat[s.number]?.isNotEmpty ?? false) ||
-      sealed.contains(s.number) ||
-      sealedLevels.any((k) => k ~/ 1000 == s.number);
+  bool hasStarted(Surah s) => _startedSurahs().contains(s.number);
+
+  /// Every surah with an ayah held or a level sealed, in one pass — Home
+  /// asks "what's next" several times per redraw, and checking each of the
+  /// 114 surahs against every sealed level each time added up on a phone.
+  Set<int> _startedSurahs() => {
+        for (final e in _heldAyat.entries)
+          if (e.value.isNotEmpty) e.key,
+        ...sealed,
+        for (final k in sealedLevels) k ~/ 1000,
+      };
 
   /// Open once the surah before it on [learningPath] is sealed — or if it's
   /// already been started, so changing the order never locks away work.
-  bool isSurahUnlocked(Surah s) {
+  bool isSurahUnlocked(Surah s, [Set<int>? started]) {
     final path = learningPath;
     final i = path.indexWhere((x) => x.number == s.number);
     if (i <= 0) return i == 0;
-    return sealed.contains(path[i - 1].number) || hasStarted(s);
+    return sealed.contains(path[i - 1].number) ||
+        (started ?? _startedSurahs()).contains(s.number);
   }
 
   /// Surahs the learner already knows by heart, picked on the welcome
@@ -549,11 +557,16 @@ class AppState extends ChangeNotifier {
   /// the next one on [learningPath].
   Surah? get nextSurah {
     final path = learningPath;
+    final started = _startedSurahs();
     for (final s in path) {
-      if (!sealed.contains(s.number) && hasStarted(s)) return s;
+      if (!sealed.contains(s.number) && started.contains(s.number)) return s;
     }
+    // With nothing under way, the first unsealed surah on the path is the
+    // one whose predecessor is sealed (or the path's very first).
     for (final s in path) {
-      if (!sealed.contains(s.number) && isSurahUnlocked(s)) return s;
+      if (!sealed.contains(s.number)) {
+        return isSurahUnlocked(s, started) ? s : null;
+      }
     }
     return null;
   }
@@ -712,16 +725,27 @@ class AppState extends ChangeNotifier {
   Future<void> _finishSigningIn() async {
     final userId = _userId;
     if (_authToken == null || userId == null) return;
+    // All four asked for at once: one after another they cost four round
+    // trips to the server (a second or more from Iran) before the account's
+    // progress appeared. Applied in the same order as before.
+    final profile =
+        withFreshToken((token) => Backend.getProfile(token, userId));
+    final learning = withFreshToken(Backend.getLearningState);
+    final progress = withFreshToken(Backend.listSurahProgress);
+    final marks = withFreshToken(Backend.listBookmarks);
+    // Whichever fails first is reported below; the others mustn't surface
+    // as unhandled errors meanwhile.
+    for (final f in [profile, learning, progress, marks]) {
+      f.ignore();
+    }
     try {
-      final profile =
-          await withFreshToken((token) => Backend.getProfile(token, userId));
-      _applyRemoteProfile(profile);
+      _applyRemoteProfile(await profile);
       _reconcileStreakIfBroken();
       // Before surah progress: the exact held ayat saved here are better
       // than the per-surah counts that fills in.
-      await _syncLearningState();
-      await _pullSurahProgress();
-      await _pullBookmarks();
+      await _syncLearningState(learning);
+      _applySurahProgress(await progress);
+      _applyBookmarks(await marks);
       _signInSynced = true;
       syncNotice = null;
     } on NetException catch (e) {
@@ -1242,11 +1266,10 @@ class AppState extends ChangeNotifier {
   /// saves the result back so each side ends up with everything. A failure
   /// is logged, not thrown: the rest of signing in still goes ahead, and
   /// nothing is saved to the account until a later sync succeeds.
-  Future<void> _syncLearningState() async {
+  Future<void> _syncLearningState(Future<Object?> fetched) async {
     if (_authToken == null || _userId == null) return;
     try {
-      final remote = LearningState.fromJson(
-          await withFreshToken(Backend.getLearningState));
+      final remote = LearningState.fromJson(await fetched);
       _applyLearningState(LearningState.merge(_learningState(), remote));
       _learningStateSynced = true;
       _persistSnapshot();
@@ -1320,9 +1343,7 @@ class AppState extends ChangeNotifier {
     _persistRefreshToken();
   }
 
-  Future<void> _pullSurahProgress() async {
-    if (_authToken == null) return;
-    final rows = await withFreshToken(Backend.listSurahProgress);
+  void _applySurahProgress(List<Map<String, dynamic>> rows) {
     for (final r in rows) {
       final surah = (r['surah'] as num).toInt();
       final heldCount = (r['held_count'] as num?)?.toInt() ?? 0;
@@ -1338,9 +1359,7 @@ class AppState extends ChangeNotifier {
     _persistSnapshot();
   }
 
-  Future<void> _pullBookmarks() async {
-    if (_authToken == null) return;
-    final rows = await withFreshToken(Backend.listBookmarks);
+  void _applyBookmarks(List<Map<String, dynamic>> rows) {
     bookmarks.clear();
     for (final r in rows) {
       bookmarks['${r['surah']}:${r['ayah']}'] = r['id'] as String;

@@ -19,6 +19,20 @@ _flutter.loader.load({
 });
 
 if ('serviceWorker' in navigator) {
+  // The app's files come from the saved copy of the build that was current
+  // when it was saved (see app_cache_sw.js). When a newer build's worker
+  // takes over during the first seconds of opening — still on the splash or
+  // sign-in screen — reload once so the new release shows now rather than
+  // on the next open. Not on a first visit (nothing was in control yet),
+  // and never mid-use.
+  const openedAt = Date.now();
+  const hadWorker = !!navigator.serviceWorker.controller;
+  let reloading = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!hadWorker || reloading || Date.now() - openedAt > 10000) return;
+    reloading = true;
+    window.location.reload();
+  });
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('app_cache_sw.js').catch(() => {});
   });

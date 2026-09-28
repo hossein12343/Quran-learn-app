@@ -4,12 +4,22 @@
 // generated flutter_service_worker.js stopped doing real caching a
 // while back (current Flutter versions ship it purely as a one-time
 // "unregister whatever old service worker is here" cleanup step), so
-// this is the only thing actually making a repeat visit work with a
-// flaky or absent connection. Registered from web/flutter_bootstrap.js
-// as a fully separate service worker — Flutter's own SW registration
-// is deliberately left out of that file so the two never compete for
-// the same scope.
-const CACHE_NAME = 'ql-cache-v1';
+// this is what makes a repeat visit fast and work offline. Registered
+// from web/flutter_bootstrap.js as a fully separate service worker —
+// Flutter's own SW registration is deliberately left out of that file so
+// the two never compete for the same scope.
+
+// Replaced with a hash of the build by tools/build_web.py. Each build gets
+// its own cache, so files from two builds are never mixed; a new build
+// changes this file, which is how the browser notices there's an update.
+const BUILD = '__BUILD__';
+const STAMPED = !BUILD.startsWith('__');
+const APP_CACHE = 'ql-app-' + BUILD;
+// Only this worker's own caches are ever cleared — never others, such as
+// offline_audio.dart's 'quran-audio-v1' (recitation downloaded for
+// offline use), which the old version of this file used to wipe on every
+// update.
+const OWN_PREFIX = 'ql-';
 
 self.addEventListener('install', () => {
   self.skipWaiting();
@@ -21,46 +31,93 @@ self.addEventListener('activate', (event) => {
       .keys()
       .then((keys) =>
         Promise.all(
-          keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k)),
+          keys
+            .filter((k) => k.startsWith(OWN_PREFIX) && k !== APP_CACHE)
+            .map((k) => caches.delete(k)),
         ),
       )
       .then(() => self.clients.claim()),
   );
 });
 
-// Network-first, falling back to cache: every successful same-origin
-// GET response is cached as a side effect, and a failed fetch (offline,
-// or a flaky connection) is served from whatever's already cached — a
-// navigation request with no exact cache entry falls back to the
-// cached app shell (index.html) instead, since this is a client-routed
-// single-page app and any path should still boot the app offline. API
-// calls (api.quran.com, everyayah.com, Supabase) are cross-origin and
-// never reach this handler at all — they either need to be live or
-// already have their own caching (see offline_audio.dart's Cache
-// Storage wrapper for recitation audio).
+function store(req, res) {
+  if (res && res.status === 200 && res.type === 'basic') {
+    const copy = res.clone();
+    caches.open(APP_CACHE).then((cache) => cache.put(req, copy));
+  }
+  return res;
+}
+
+// Opening the app (a navigation) asks the network first, so a new release
+// is seen straight away, but gives up after a few seconds on a bad
+// connection and uses the saved copy.
+async function navigate(req) {
+  const cache = await caches.open(APP_CACHE);
+  // Every app route (/, /home, /login, …) is the same page; the site's
+  // own documents (privacy.html, eula.html) are saved under their own name.
+  const path = new URL(req.url).pathname;
+  const key = path.endsWith('.html') && !path.endsWith('/index.html')
+    ? req
+    : '/';
+  const network = fetch(req).then((res) => {
+    if (res && res.ok) cache.put(key, res.clone());
+    return res;
+  });
+  // A late failure after the timeout is expected offline; don't report it.
+  network.catch(() => {});
+  const timeout = new Promise((resolve) => setTimeout(resolve, 3000));
+  try {
+    const res = await Promise.race([network, timeout]);
+    if (res) return res;
+  } catch (_) {
+    // Offline — fall through to the saved copy.
+  }
+  const saved = await cache.match(key);
+  return saved || network;
+}
+
+// Everything else — app code, the graphics engine, fonts, the Quran text —
+// only changes with a new build, so within a build it comes straight from
+// the saved copy. Asking the server first cost a round trip for every
+// file on every open (about 7 in a row before the app could start).
+async function fromCache(req) {
+  const saved = await caches.match(req, { cacheName: APP_CACHE });
+  if (saved) return saved;
+  return store(req, await fetch(req));
+}
+
+// The old behaviour, kept for a build that wasn't stamped: always correct,
+// just slower.
+async function networkFirst(req) {
+  try {
+    return store(req, await fetch(req));
+  } catch (err) {
+    const saved = await caches.match(req);
+    if (saved) return saved;
+    if (req.mode === 'navigate') {
+      const shell = await caches.match('/');
+      if (shell) return shell;
+    }
+    throw err;
+  }
+}
+
 self.addEventListener('fetch', (event) => {
   const req = event.request;
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
+  // API calls (Supabase, api.quran.com, everyayah.com, …) are cross-origin
+  // and never handled here.
   if (url.origin !== self.location.origin) return;
+  // The worker itself must always come from the network, or it could
+  // never update.
+  if (url.pathname.endsWith('app_cache_sw.js')) return;
 
-  event.respondWith(
-    fetch(req)
-      .then((res) => {
-        if (res && res.ok) {
-          const copy = res.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(req, copy));
-        }
-        return res;
-      })
-      .catch(async () => {
-        const cached = await caches.match(req);
-        if (cached) return cached;
-        if (req.mode === 'navigate') {
-          const shell = await caches.match('index.html');
-          if (shell) return shell;
-        }
-        return Response.error();
-      }),
-  );
+  if (!STAMPED) {
+    event.respondWith(networkFirst(req));
+  } else if (req.mode === 'navigate') {
+    event.respondWith(navigate(req));
+  } else {
+    event.respondWith(fromCache(req));
+  }
 });

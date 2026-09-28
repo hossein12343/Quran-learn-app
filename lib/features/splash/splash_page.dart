@@ -74,7 +74,9 @@ class _SplashPageState extends State<SplashPage> {
     // the reader's own toggle (see quran_page.dart's _toggleTajweed) —
     // the same lazy-on-first-use pattern translation2/word-by-word/duas
     // already use.
-    await Future<void>.delayed(const Duration(milliseconds: 300));
+    // Only as long as it takes to finish drawing this screen, so navigating
+    // never lands mid-build. (This was a flat 300ms, added to every open.)
+    await WidgetsBinding.instance.endOfFrame;
     if (!mounted) return;
     if (signedInByRedirect) {
       Navigator.of(context).pushReplacementNamed(
