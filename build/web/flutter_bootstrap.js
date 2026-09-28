@@ -72,11 +72,24 @@ if ('serviceWorker' in navigator) {
   navigator.serviceWorker.addEventListener('controllerchange', () => {
     if (hadWorker) updateReady = true;
   });
+  // The browser looks for a new release when the app is opened. A Home
+  // Screen app can instead be resumed for days without being opened again,
+  // so it also looks when brought back after an hour or more.
+  let lastUpdateCheck = Date.now();
+  const checkForUpdate = () => {
+    lastUpdateCheck = Date.now();
+    navigator.serviceWorker
+      .getRegistration()
+      .then((reg) => reg && reg.update())
+      .catch(() => {});
+  };
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) {
       hiddenAt = Date.now();
     } else if (updateReady && hiddenAt && Date.now() - hiddenAt > 15 * 60 * 1000) {
       window.location.reload();
+    } else if (Date.now() - lastUpdateCheck > 60 * 60 * 1000) {
+      checkForUpdate();
     }
   });
   window.addEventListener('load', () => {
