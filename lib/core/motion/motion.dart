@@ -189,10 +189,18 @@ class _PressDetectorState extends State<PressDetector> {
         onPointerMove: on ? _move : null,
         onPointerUp: on ? _up : null,
         onPointerCancel: on ? _up : null,
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
+        // One node per tappable surface, marked as a button with its own
+        // tap action, so VoiceOver and TalkBack can find and press it.
+        child: Semantics(
+          container: true,
+          button: on,
           onTap: widget.onTap,
-          child: widget.builder(context, on && _pressed, on && _hovered),
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            excludeFromSemantics: true,
+            onTap: widget.onTap,
+            child: widget.builder(context, on && _pressed, on && _hovered),
+          ),
         ),
       ),
     );
@@ -240,6 +248,7 @@ class Pressable extends StatelessWidget {
       result = Semantics(
         button: true,
         label: semanticLabel,
+        onTap: onTap,
         child: ExcludeSemantics(child: result),
       );
     }

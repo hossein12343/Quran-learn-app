@@ -12,6 +12,9 @@ class PathNode extends StatefulWidget {
   final Widget icon;
   final VoidCallback onTap;
 
+  /// What a screen reader says for this node; the face is only an icon.
+  final String? semanticLabel;
+
   const PathNode({
     super.key,
     required this.size,
@@ -19,6 +22,7 @@ class PathNode extends StatefulWidget {
     required this.shadow,
     required this.icon,
     required this.onTap,
+    this.semanticLabel,
   });
 
   @override
@@ -29,8 +33,13 @@ class _PathNodeState extends State<PathNode> {
   static const double _depth = 7;
 
   @override
-  Widget build(BuildContext context) =>
-      PressDetector(onTap: widget.onTap, builder: _build);
+  Widget build(BuildContext context) => PressDetector(
+        onTap: widget.onTap,
+        builder: (context, down, hover) => Semantics(
+          label: widget.semanticLabel,
+          child: _build(context, down, hover),
+        ),
+      );
 
   Widget _build(BuildContext context, bool down, bool hover) {
     final hovering = hover && !down;

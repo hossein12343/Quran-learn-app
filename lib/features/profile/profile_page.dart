@@ -28,9 +28,8 @@ class ProfilePage extends StatelessWidget {
   }
 
   Widget _build(BuildContext context) {
-    final initials = appState.displayName.isEmpty
-        ? '?'
-        : appState.displayName.trim()[0].toUpperCase();
+    final name = appState.displayName.trim();
+    final initials = name.isEmpty ? '?' : name[0].toUpperCase();
 
     return Scaffold(
       appBar: AppBar(title: const Text('پروفایل')),
@@ -190,7 +189,7 @@ class ProfilePage extends StatelessWidget {
                   context,
                   'حساب کاربری',
                   appState.hasSyncedAccount
-                      ? 'همگام‌شده با این رایانه'
+                      ? 'ذخیره در حساب شما'
                       : 'فقط روی این دستگاه'),
               Pressable(
                 onTap: () => Navigator.of(context).push(

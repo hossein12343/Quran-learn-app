@@ -323,6 +323,9 @@ class _LearnPageState extends State<LearnPage> {
           face: face,
           shadow: shadow,
           icon: icon,
+          semanticLabel: '${s.arabicName}، '
+              '${chunkCountFor(s) > 1 ? 'سطح ${chunkIndex + 1}، آیات ${start + 1} تا $end، ' : ''}'
+              '${sealed ? 'تمام‌شده' : unlocked ? 'باز' : 'قفل'}',
           onTap: unlocked
               ? () => _open(s, chunkIndex)
               : () {

@@ -57,7 +57,25 @@ class Backend {
     // `user`; a project with confirmation off returns a full session with
     // the user at the top level instead — handle both.
     final user = (data['user'] ?? data) as Map<String, dynamic>;
+    // An email that already has an account (often made with Google) gets
+    // no error — Supabase won't reveal which emails exist — but a stand-in
+    // user with no identities, and no email is sent. Waiting for a code
+    // would wait forever, so say so now.
+    if (signupWasForExistingAccount(user)) {
+      throw const NetException(
+        'این ایمیل قبلاً حساب دارد. وارد شوید؛ اگر قبلاً با گوگل وارد '
+        'شده‌اید، «ادامه با گوگل» را بزنید.',
+        code: 'user_already_exists',
+      );
+    }
     return user['id'] as String;
+  }
+
+  /// See [signUp]: Supabase's answer for an email that already has an
+  /// account carries an empty `identities` list.
+  static bool signupWasForExistingAccount(Map<String, dynamic> user) {
+    final identities = user['identities'];
+    return identities is List && identities.isEmpty;
   }
 
   /// Confirms the code Supabase emailed after [signUp]. Success returns a
@@ -629,11 +647,13 @@ class Backend {
 }
 
 const Map<String, String> _authMessages = {
-  'invalid_credentials': 'ایمیل یا رمز عبور درست نیست.',
+  'invalid_credentials':
+      'ایمیل یا رمز عبور درست نیست. اگر حسابتان را با گوگل ساخته‌اید، «ادامه با گوگل» را بزنید.',
   'email_not_confirmed': 'این ایمیل هنوز تأیید نشده است.',
   'user_already_exists': 'با این ایمیل قبلاً حساب ساخته شده است. وارد شوید.',
   'email_exists': 'با این ایمیل قبلاً حساب ساخته شده است. وارد شوید.',
-  'otp_expired': 'این کد درست نیست یا منقضی شده است.',
+  'otp_expired':
+      'این کد درست نیست یا منقضی شده است. اگر چند بار کد گرفته‌اید، فقط آخرین آن‌ها کار می‌کند.',
   'weak_password': 'این رمز عبور خیلی ساده است. رمز قوی‌تری انتخاب کنید.',
   'same_password': 'رمز جدید باید با رمز قبلی فرق داشته باشد.',
   'email_address_invalid': 'این آدرس ایمیل معتبر نیست.',

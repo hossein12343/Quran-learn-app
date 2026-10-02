@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quran_learn_app/core/theme/app_theme.dart';
 import 'package:quran_learn_app/features/auth/auth_pages.dart';
+import 'package:quran_learn_app/shared/services/backend.dart';
 
 Widget _app(Widget home) => MaterialApp(
       theme: AppTheme.light(),
@@ -102,5 +103,21 @@ void main() {
       expect(sent, ['123456']);
       await tester.pumpWidget(const SizedBox());
     });
+  });
+
+  test('a sign-up for an email that already has an account is recognised', () {
+    // Supabase's stand-in answer: a user with no identities, no email sent.
+    expect(Backend.signupWasForExistingAccount({'id': 'x', 'identities': []}),
+        isTrue);
+    expect(
+        Backend.signupWasForExistingAccount({
+          'id': 'x',
+          'identities': [
+            {'provider': 'email'}
+          ]
+        }),
+        isFalse);
+    // Some setups return no identities field at all; never block those.
+    expect(Backend.signupWasForExistingAccount({'id': 'x'}), isFalse);
   });
 }

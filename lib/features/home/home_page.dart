@@ -556,55 +556,64 @@ class _HomePageState extends State<HomePage> {
           Center(
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 380),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  for (var i = 0; i < 7; i++)
-                    Column(
-                      children: [
-                        Text(
-                          labels[i],
-                          style: Theme.of(context)
-                              .textTheme
-                              .labelSmall
-                              ?.copyWith(
-                                color:
-                                    week[i].isToday ? AppColors.primary : null,
-                                fontWeight:
-                                    week[i].isToday ? FontWeight.w800 : null,
-                              ),
-                        ),
-                        const SizedBox(height: 6),
-                        Container(
-                          width: 34,
-                          height: 34,
-                          alignment: Alignment.center,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: week[i].active
-                                ? AppColors.goldLight
-                                : (week[i].future
-                                    ? Colors.transparent
-                                    : surface),
-                            border: week[i].isToday
-                                ? Border.all(color: AppColors.primary, width: 2)
-                                : (week[i].future
-                                    ? Border.all(color: surface, width: 1.5)
-                                    : null),
+              // Seven days must fit even a 320px-wide phone, where 34px
+              // circles came 2px too wide; they shrink to fit instead.
+              child: LayoutBuilder(builder: (context, box) {
+                final dot = ((box.maxWidth - 6 * 4) / 7).clamp(24.0, 34.0);
+                return Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    for (var i = 0; i < 7; i++)
+                      Column(
+                        children: [
+                          Text(
+                            labels[i],
+                            style: Theme.of(context)
+                                .textTheme
+                                .labelSmall
+                                ?.copyWith(
+                                  color: week[i].isToday
+                                      ? AppColors.primary
+                                      : null,
+                                  fontWeight:
+                                      week[i].isToday ? FontWeight.w800 : null,
+                                ),
                           ),
-                          child: week[i].active
-                              ? const Icon(Icons.local_fire_department_rounded,
-                                  size: 19, color: AppColors.streakFire)
-                              : Icon(Icons.circle,
-                                  size: 5,
-                                  color: week[i].future
+                          const SizedBox(height: 6),
+                          Container(
+                            width: dot,
+                            height: dot,
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: week[i].active
+                                  ? AppColors.goldLight
+                                  : (week[i].future
                                       ? Colors.transparent
-                                      : context.mutedColor),
-                        ),
-                      ],
-                    ),
-                ],
-              ),
+                                      : surface),
+                              border: week[i].isToday
+                                  ? Border.all(
+                                      color: AppColors.primary, width: 2)
+                                  : (week[i].future
+                                      ? Border.all(color: surface, width: 1.5)
+                                      : null),
+                            ),
+                            child: week[i].active
+                                ? const Icon(
+                                    Icons.local_fire_department_rounded,
+                                    size: 19,
+                                    color: AppColors.streakFire)
+                                : Icon(Icons.circle,
+                                    size: 5,
+                                    color: week[i].future
+                                        ? Colors.transparent
+                                        : context.mutedColor),
+                          ),
+                        ],
+                      ),
+                  ],
+                );
+              }),
             ),
           ),
         ],

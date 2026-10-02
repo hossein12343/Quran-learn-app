@@ -402,9 +402,11 @@ class _CirclesPageState extends State<CirclesPage> {
 
   String _lastActiveLabel(String? dateKey) {
     if (dateKey == null) return 'هنوز فعالیتی نداشته';
-    final parts = dateKey.split('-').map(int.parse).toList();
-    if (parts.length != 3) return 'هنوز فعالیتی نداشته';
-    final date = DateTime(parts[0], parts[1], parts[2]);
+    final parts = dateKey.split('-').map(int.tryParse).toList();
+    if (parts.length != 3 || parts.contains(null)) {
+      return 'هنوز فعالیتی نداشته';
+    }
+    final date = DateTime(parts[0]!, parts[1]!, parts[2]!);
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final days = today.difference(date).inDays;

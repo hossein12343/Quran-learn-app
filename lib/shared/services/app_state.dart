@@ -255,9 +255,15 @@ class AppState extends ChangeNotifier {
         '${now.day.toString().padLeft(2, '0')}';
   }
 
+  /// A 'yyyy-MM-dd' day. A malformed one (from an old or damaged save)
+  /// reads as today rather than crashing the app while it opens.
   DateTime _parseYmd(String s) {
-    final p = s.split('-');
-    return DateTime(int.parse(p[0]), int.parse(p[1]), int.parse(p[2]));
+    final p = s.split('-').map(int.tryParse).toList();
+    if (p.length != 3 || p.contains(null)) {
+      final now = DateTime.now();
+      return DateTime(now.year, now.month, now.day);
+    }
+    return DateTime(p[0]!, p[1]!, p[2]!);
   }
 
   static String ymdKey(DateTime d) => '${d.year.toString().padLeft(4, '0')}-'

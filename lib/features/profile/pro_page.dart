@@ -166,7 +166,8 @@ class ProPage extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(perk.title, style: Theme.of(context).textTheme.titleMedium),
+                Text(perk.title,
+                    style: Theme.of(context).textTheme.titleMedium),
                 const SizedBox(height: 2),
                 Text(perk.description,
                     style: Theme.of(context).textTheme.bodySmall),

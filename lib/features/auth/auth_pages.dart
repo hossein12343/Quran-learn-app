@@ -6,6 +6,7 @@ import '../../core/theme/app_theme.dart';
 import '../../core/widgets/captcha_widget.dart';
 import '../../core/widgets/duo_button.dart';
 import '../../core/widgets/language_toggle.dart';
+import '../../shared/services/app_log.dart';
 import '../../shared/services/app_state.dart';
 import '../../shared/services/backend.dart';
 import '../../shared/services/captcha.dart';
@@ -991,6 +992,15 @@ class _VerifyCodePageState extends State<VerifyCodePage> {
         _previous = '';
       });
       _focus.requestFocus();
+    } on Object catch (e, stack) {
+      // Anything else (say the sign-up was lost because the page reloaded)
+      // must not leave the spinner turning forever.
+      AppLog.error('Code check failed', error: e, stack: stack);
+      if (!mounted) return;
+      setState(() {
+        _busy = false;
+        _error = 'مشکلی پیش آمد. به صفحهٔ قبل برگردید و دوباره کد بگیرید.';
+      });
     }
   }
 
