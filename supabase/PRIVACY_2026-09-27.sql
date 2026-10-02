@@ -53,3 +53,11 @@ drop policy if exists "circle owners can view their members' profiles"
 -- Migration `internal_app_stats`: totals-only stats for the owner, in the
 -- `internal` schema the API doesn't expose. See the migration itself for
 -- the full function; run with `select internal.app_stats();`.
+
+-- 2026-10-02, migrations `lock_is_pro`, `report_error*`, `internal_error_summary`:
+--   * trigger keep_is_pro on profiles: signed-in/anon writes can't change
+--     is_pro (new profiles start false); only dashboard / service role can.
+--   * public.report_error(...): anonymous, rate-limited (20/h per hashed
+--     sender, 300/h overall), email-scrubbed error reports into public.logs,
+--     kept 30 days. No account id stored.
+--   * internal.error_summary(days): counts + top messages, not exposed.

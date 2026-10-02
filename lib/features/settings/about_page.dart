@@ -43,10 +43,13 @@ class AboutPage extends StatelessWidget {
                 context,
                 icon: Icons.text_fields_rounded,
                 title: 'متن قرآن',
+                // Quran Foundation's terms ask apps using its data to show
+                // this credit wherever the content appears.
                 body: 'رسم‌الخط عثمانی، به روایت حفص از عاصم — همان '
                     'روایتی که در اکثر قریب به‌اتفاق مصحف‌های چاپی و '
                     'برنامه‌های قرآنی استفاده می‌شود. متن از Quran.com '
-                    '(api.quran.com) دریافت شده است.',
+                    '(api.quran.com) دریافت شده است.\n'
+                    'Quran data provided by Quran Foundation.',
               ),
             ),
             const SizedBox(height: AppSpacing.lg),

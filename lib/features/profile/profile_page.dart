@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import '../../core/motion/motion.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/pattern_overlay.dart';
+import '../../core/widgets/install_hint.dart';
+import '../../shared/services/app_install.dart';
 import '../../shared/services/app_state.dart';
 import '../../shared/services/net/net.dart';
 import '../../shared/services/oauth/web_nav.dart';
@@ -245,9 +247,26 @@ class ProfilePage extends StatelessWidget {
             child: Wrap(
               alignment: WrapAlignment.center,
               children: [
+                ValueListenableBuilder<InstallWay>(
+                  valueListenable: installWay,
+                  builder: (context, way, _) => way == InstallWay.none
+                      ? const SizedBox.shrink()
+                      : TextButton(
+                          onPressed: () => way == InstallWay.browserPrompt
+                              ? promptInstall()
+                              : showInstallSteps(context, way),
+                          child: Text('نصب روی گوشی',
+                              style: TextStyle(color: context.mutedColor)),
+                        ),
+                ),
                 TextButton(
                   onPressed: () => WebNav.openPage('/privacy.html'),
                   child: Text('حریم خصوصی',
+                      style: TextStyle(color: context.mutedColor)),
+                ),
+                TextButton(
+                  onPressed: () => WebNav.openPage('/terms.html'),
+                  child: Text('شرایط استفاده',
                       style: TextStyle(color: context.mutedColor)),
                 ),
                 if (appState.hasSyncedAccount)
@@ -406,7 +425,7 @@ class ProfilePage extends StatelessWidget {
                   const Text('ارتقا به Pro',
                       style: TextStyle(
                           color: AppColors.white, fontWeight: FontWeight.w800)),
-                  Text('قلب نامحدود، همهٔ قاریان و بیشتر',
+                  Text('قلب نامحدود، محافظ روند و بیشتر',
                       style: Theme.of(context)
                           .textTheme
                           .bodySmall

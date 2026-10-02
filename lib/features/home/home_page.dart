@@ -3,6 +3,7 @@ import '../../core/motion/motion.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/confetti.dart';
 import '../../core/widgets/duo_button.dart';
+import '../../core/widgets/install_hint.dart';
 import '../../core/widgets/mascot.dart';
 import '../../core/widgets/pattern_overlay.dart';
 import '../../shared/services/app_state.dart';
@@ -176,6 +177,7 @@ class _HomePageState extends State<HomePage> {
               ),
             ),
             const SizedBox(height: AppSpacing.lg),
+            const InstallHint(padding: EdgeInsets.only(bottom: AppSpacing.lg)),
             Reveal(index: 0, child: _weekStrip()),
             const SizedBox(height: AppSpacing.xl),
             // The plan is the one thing to do on Home; everything it used
@@ -671,8 +673,7 @@ class _HomePageState extends State<HomePage> {
                                   fontSize: 17,
                                   fontWeight: FontWeight.w800)),
                           SizedBox(height: 2),
-                          Text(
-                              '\u0642\u0644\u0628 \u0646\u0627\u0645\u062d\u062f\u0648\u062f\u060c \u0645\u062d\u0627\u0641\u0638 \u0631\u0648\u0646\u062f\u060c \u0647\u0645\u0647\u0654 \u0642\u0627\u0631\u06cc\u0627\u0646',
+                          Text('قلب نامحدود، محافظ روند و بیشتر',
                               style: TextStyle(
                                   color: Colors.white70, fontSize: 12.5)),
                         ],

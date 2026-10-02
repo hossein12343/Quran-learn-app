@@ -35,6 +35,7 @@ import 'shared/services/recite_check.dart';
 import 'shared/services/recite_check_impl/recite_check_factory.dart';
 import 'shared/services/reminder_impl/reminder_factory.dart';
 import 'shared/services/reminders.dart';
+import 'shared/services/app_install.dart';
 import 'shared/services/settings.dart';
 import 'shared/services/sfx.dart';
 import 'shared/services/sfx_impl/sfx_factory.dart';
@@ -156,6 +157,7 @@ void main() {
   // Switching to path-based URLs frees `#` entirely for Supabase's tokens.
   if (kIsWeb) usePathUrlStrategy();
   AppLog.captureUncaught();
+  watchInstallability();
   recitation = createRecitationPlayer();
   recitation.warmUp();
   offlineAudio = createOfflineAudio();

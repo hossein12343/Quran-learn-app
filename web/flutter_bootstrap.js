@@ -18,6 +18,36 @@ _flutter.loader.load({
   },
 });
 
+// Chrome on Android offers "Install app" through this event, often before
+// the app has started; keep it so the app's own Install button can show
+// the browser's dialog later (see app_install_web.dart).
+window.__qlInstall = null;
+window.addEventListener('beforeinstallprompt', (event) => {
+  event.preventDefault();
+  window.__qlInstall = event;
+  window.dispatchEvent(new Event('ql-installable'));
+});
+window.addEventListener('appinstalled', () => {
+  window.__qlInstall = null;
+  window.dispatchEvent(new Event('ql-installable'));
+});
+window.__qlStandalone = () =>
+  (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) ||
+  navigator.standalone === true;
+window.__qlCanInstall = () => !!window.__qlInstall;
+window.__qlPromptInstall = (done) => {
+  const offer = window.__qlInstall;
+  if (!offer) return done(false);
+  offer.prompt();
+  offer.userChoice.then(
+    (choice) => {
+      window.__qlInstall = null;
+      done(!!choice && choice.outcome === 'accepted');
+    },
+    () => done(false),
+  );
+};
+
 if ('serviceWorker' in navigator) {
   // The app's files come from the saved copy of the build that was current
   // when this open started (see app_cache_sw.js); a newer build is picked

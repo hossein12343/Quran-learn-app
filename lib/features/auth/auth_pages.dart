@@ -13,6 +13,7 @@ import '../../shared/services/daily_plan.dart';
 import '../../shared/services/net/net.dart';
 import '../../shared/services/oauth/web_nav.dart';
 import 'known_surahs_sheet.dart';
+import '../../core/widgets/install_hint.dart';
 
 /// The origin (`https://host/`) this page is running at — what OAuth
 /// providers redirect back to. Built from `Uri.origin` rather than
@@ -208,6 +209,24 @@ class Wordmark extends StatelessWidget {
       ),
     );
   }
+}
+
+/// A small underlined link to one of the site's own pages (terms, privacy).
+Widget _footLink(BuildContext context, String label, String path) {
+  return InkWell(
+    onTap: () => WebNav.openPage(path),
+    borderRadius: BorderRadius.circular(4),
+    child: Padding(
+      padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
+      child: Text(
+        label,
+        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: context.mutedColor,
+              decoration: TextDecoration.underline,
+            ),
+      ),
+    ),
+  );
 }
 
 class _FormError extends StatelessWidget {
@@ -617,6 +636,9 @@ class _AuthPageState extends State<AuthPage> {
             : (_signUp ? 'ساخت حساب' : 'ورود');
     return _AuthScaffold(
       children: [
+        // On an iPhone, installing first matters: the Home Screen app keeps
+        // its own sign-in, separate from Safari's.
+        const InstallHint(padding: EdgeInsets.only(bottom: AppSpacing.lg)),
         const Center(child: Wordmark(size: 64)),
         const SizedBox(height: AppSpacing.lg),
         Text('یادگیری قرآن',
@@ -729,18 +751,19 @@ class _AuthPageState extends State<AuthPage> {
         const SizedBox(height: AppSpacing.md),
         // Signing in with Google creates an account too, so this shows in
         // both modes.
-        Center(
-          child: TextButton(
-            onPressed: () => WebNav.openPage('/privacy.html'),
-            child: Text(
-              'با ادامه، سیاست حریم خصوصی را می‌پذیرید.',
-              textAlign: TextAlign.center,
-              style: t.bodySmall?.copyWith(
-                color: context.mutedColor,
-                decoration: TextDecoration.underline,
-              ),
-            ),
-          ),
+        Wrap(
+          alignment: WrapAlignment.center,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            Text('با ادامه، ',
+                style: t.bodySmall?.copyWith(color: context.mutedColor)),
+            _footLink(context, 'شرایط استفاده', '/terms.html'),
+            Text(' و ',
+                style: t.bodySmall?.copyWith(color: context.mutedColor)),
+            _footLink(context, 'حریم خصوصی', '/privacy.html'),
+            Text(' را می‌پذیرید.',
+                style: t.bodySmall?.copyWith(color: context.mutedColor)),
+          ],
         ),
       ],
     );

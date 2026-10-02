@@ -48,11 +48,9 @@ class Qari {
   final String style;
   final String folder;
 
-  /// Gated behind Pro (see `shared/services/plan.dart`). Two of the four
-  /// known reciters stay free so the app is fully usable without ever
-  /// upgrading — this only ever narrows an already-generous default down
-  /// to "the other two," never locks reciting itself.
-  final bool isPro;
+  // Every reciter is free. Two used to be Pro, but the audio comes from
+  // everyayah.com with no licence for selling access to it, and the terms
+  // of use promise recitations never sit behind a payment.
 
   const Qari({
     required this.id,
@@ -60,7 +58,6 @@ class Qari {
     required this.nativeName,
     required this.style,
     required this.folder,
-    this.isPro = false,
   });
 }
 
@@ -82,15 +79,13 @@ const List<Qari> knownQaris = <Qari>[
       name: 'Abdul Basit Abdus Samad',
       nativeName: 'عبد الباسط عبد الصمد',
       style: 'مجوّد — تزئین‌شده، آرام',
-      folder: 'Abdul_Basit_Murattal_192kbps',
-      isPro: true),
+      folder: 'Abdul_Basit_Murattal_192kbps'),
   Qari(
       id: 'sudais',
       name: 'Abdur-Rahman As-Sudais',
       nativeName: 'عبد الرحمن السديس',
       style: 'مرتل — مناسب برای مبتدیان',
-      folder: 'Abdurrahmaan_As-Sudais_192kbps',
-      isPro: true),
+      folder: 'Abdurrahmaan_As-Sudais_192kbps'),
 ];
 
 const List<double> playbackSpeeds = <double>[0.5, 0.75, 1.0, 1.25, 1.5];

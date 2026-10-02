@@ -297,6 +297,31 @@ class Backend {
     if (!res.ok) throw _pgException(res.body);
   }
 
+  /// An error or crash, for the owner to see (see `report_error`). Sent
+  /// with the public key only — no account attached.
+  static Future<void> reportError({
+    required String level,
+    required String message,
+    String? error,
+    String? stack,
+    String? route,
+    String? platform,
+  }) async {
+    await Net.request(
+      'POST',
+      '$baseUrl/rest/v1/rpc/report_error',
+      headers: _headers(),
+      body: {
+        'p_level': level,
+        'p_message': message,
+        'p_error': error,
+        'p_stack': stack,
+        'p_route': route,
+        'p_platform': platform,
+      },
+    );
+  }
+
   // ------------------------------------------------------------- bookmarks
 
   static Future<List<Map<String, dynamic>>> listBookmarks(String token) async {

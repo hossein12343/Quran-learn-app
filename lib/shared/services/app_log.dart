@@ -1,14 +1,17 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
+import 'backend.dart';
 
 enum LogLevel { info, warn, error }
 
-/// Local, best-effort diagnostic logging.
-///
-/// The app does not POST raw exception details from an unauthenticated
-/// browser client. Logging must never be able to break the app, so it is
-/// printed locally and intentionally never throws into the caller.
+/// Best-effort diagnostic logging. Everything prints locally; errors and
+/// crashes are also reported to the server (`report_error`), so problems
+/// testers hit can be seen. Reports carry no account id, the server blanks
+/// email addresses and limits how many it accepts, and each session sends
+/// at most a handful, each distinct problem once. Warnings (mostly an
+/// offline phone) stay local. Logging must never be able to break the app,
+/// so nothing here throws into the caller.
 abstract class AppLog {
   /// Set by main.dart once a route is known, so entries carry roughly
   /// where in the app they happened without every call site passing it.
@@ -17,7 +20,8 @@ abstract class AppLog {
   static void info(String message, {Map<String, dynamic>? context}) =>
       _send(LogLevel.info, message, context: context);
 
-  static void warn(String message, {Object? error, Map<String, dynamic>? context}) =>
+  static void warn(String message,
+          {Object? error, Map<String, dynamic>? context}) =>
       _send(LogLevel.warn, message, error: error, context: context);
 
   static void error(
@@ -26,7 +30,8 @@ abstract class AppLog {
     StackTrace? stack,
     Map<String, dynamic>? context,
   }) =>
-      _send(LogLevel.error, message, error: error, stack: stack, context: context);
+      _send(LogLevel.error, message,
+          error: error, stack: stack, context: context);
 
   static void _send(
     LogLevel level,
@@ -40,6 +45,12 @@ abstract class AppLog {
     unawaited(_post(level, message, error, stack, context));
   }
 
+  static const _maxReportsPerSession = 10;
+  static final Set<String> _reported = <String>{};
+
+  /// Off in tests, which have no server to report to.
+  static bool reportingEnabled = kIsWeb && !kDebugMode;
+
   static Future<void> _post(
     LogLevel level,
     String message,
@@ -47,12 +58,21 @@ abstract class AppLog {
     StackTrace? stack,
     Map<String, dynamic>? context,
   ) async {
-    // Do not send raw exception data from a public client to a writable
-    // database table. It can contain implementation details and makes the
-    // endpoint a trivial telemetry-spam target. Keep diagnostics local until
-    // a rate-limited, authenticated Edge Function is introduced.
-    _trim(stack?.toString());
-    safeContext(context ?? <String, dynamic>{});
+    if (level != LogLevel.error || !reportingEnabled) return;
+    if (_reported.length >= _maxReportsPerSession) return;
+    if (!_reported.add('$message|$error')) return;
+    try {
+      await Backend.reportError(
+        level: level.name,
+        message: message,
+        error: error?.toString(),
+        stack: _trim(stack?.toString()),
+        route: currentRoute,
+        platform: defaultTargetPlatform.name,
+      );
+    } on Object {
+      // Reporting is best effort.
+    }
   }
 
   static String _trim(String? s) {
@@ -76,7 +96,8 @@ abstract class AppLog {
       );
     };
     PlatformDispatcher.instance.onError = (Object err, StackTrace stack) {
-      error(err.toString(), error: err, stack: stack, context: {'source': 'platform'});
+      error(err.toString(),
+          error: err, stack: stack, context: {'source': 'platform'});
       return true;
     };
   }
