@@ -761,7 +761,7 @@ class AppState extends ChangeNotifier {
   String? _pendingEmail;
 
   /// Step 1 of real signup: creates the account on Supabase, which in the
-  /// same call emails it a 6-digit confirmation code (built-in — see
+  /// same call emails it a confirmation code (6–10 digits; see
   /// backend/README.md's "Real email-verified signup" section for the one
   /// dashboard template edit it needs). Unlike the rest of this class this
   /// genuinely needs the network and throws [NetException] on failure —

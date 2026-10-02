@@ -850,9 +850,38 @@ class _ModeSwitch extends StatelessWidget {
 
 enum CodePurpose { signup, recovery }
 
-/// Six boxes for the emailed code. Fills itself from Mail on iPhone
-/// (`one-time-code` autofill), accepts pasting and Persian digits, and
-/// submits as soon as the sixth digit lands — no button needed.
+/// Shortest and longest code the server can send. Supabase lets a project
+/// choose 6 to 10 digits and newer projects send 8 — this screen once
+/// assumed 6, cut every pasted 8-digit code short, and the server refused
+/// it as "invalid".
+const kMinCodeLength = 6;
+const kMaxCodeLength = 10;
+
+/// Just the code's digits (Persian and Arabic digits become 0–9), at most
+/// [kMaxCodeLength] of them.
+String cleanCode(String raw) {
+  final digits = _asciiDigits(raw).replaceAll(RegExp(r'[^0-9]'), '');
+  return digits.length > kMaxCodeLength
+      ? digits.substring(0, kMaxCodeLength)
+      : digits;
+}
+
+/// Whether a change to the code field should submit straight away: the
+/// whole code arrived at once (pasted, or filled in from Mail), or the
+/// longest possible code has been typed. Typed codes otherwise wait for
+/// the button, since the screen can't know whether 6 digits are all.
+bool codeArrivedWhole(String before, String after) =>
+    after.length >= kMinCodeLength &&
+    (after.length - before.length > 1 || after.length == kMaxCodeLength);
+
+/// For tests: receives what the code screen would send, instead of
+/// sending it.
+@visibleForTesting
+Future<void> Function(CodePurpose purpose, String code)? debugSubmitCode;
+
+/// The emailed code. Fills itself from Mail on iPhone (`one-time-code`
+/// autofill), accepts pasting and Persian digits, and submits on its own
+/// when the whole code arrives at once; typed codes use the button.
 class VerifyCodePage extends StatefulWidget {
   final String email;
   final CodePurpose purpose;
@@ -868,7 +897,6 @@ class VerifyCodePage extends StatefulWidget {
 }
 
 class _VerifyCodePageState extends State<VerifyCodePage> {
-  static const _length = 6;
   static const _resendWait = 60;
 
   final _code = TextEditingController();
@@ -908,25 +936,27 @@ class _VerifyCodePageState extends State<VerifyCodePage> {
     super.dispose();
   }
 
+  String _previous = '';
+
   void _onChanged(String raw) {
-    final digits = _asciiDigits(raw).replaceAll(RegExp(r'[^0-9]'), '');
-    final clipped =
-        digits.length > _length ? digits.substring(0, _length) : digits;
-    if (clipped != raw) {
+    final clean = cleanCode(raw);
+    if (clean != raw) {
       _code.value = TextEditingValue(
-        text: clipped,
-        selection: TextSelection.collapsed(offset: clipped.length),
+        text: clean,
+        selection: TextSelection.collapsed(offset: clean.length),
       );
     }
+    final before = _previous;
+    _previous = clean;
     setState(() => _error = null);
-    if (clipped.length == _length) _verify();
+    if (codeArrivedWhole(before, clean)) _verify();
   }
 
   Future<void> _verify() async {
     if (_busy) return;
     final code = _code.text;
-    if (code.length < _length) {
-      setState(() => _error = 'کد ۶ رقمی را کامل وارد کنید.');
+    if (code.length < kMinCodeLength) {
+      setState(() => _error = 'کد ایمیل را کامل وارد کنید.');
       return;
     }
     setState(() {
@@ -935,6 +965,12 @@ class _VerifyCodePageState extends State<VerifyCodePage> {
       _notice = null;
     });
     try {
+      final submit = debugSubmitCode;
+      if (submit != null) {
+        await submit(widget.purpose, code);
+        if (mounted) setState(() => _busy = false);
+        return;
+      }
       if (widget.purpose == CodePurpose.signup) {
         await appState.confirmSignup(code);
         if (!mounted) return;
@@ -952,6 +988,7 @@ class _VerifyCodePageState extends State<VerifyCodePage> {
         _busy = false;
         _error = e.message;
         _code.clear();
+        _previous = '';
       });
       _focus.requestFocus();
     }
@@ -992,12 +1029,12 @@ class _VerifyCodePageState extends State<VerifyCodePage> {
         const SizedBox(height: AppSpacing.sm),
         Text.rich(
           TextSpan(children: [
-            const TextSpan(text: 'کد ۶ رقمی را به '),
+            const TextSpan(text: 'کدی را که به '),
             TextSpan(
               text: widget.email,
               style: const TextStyle(fontWeight: FontWeight.w700),
             ),
-            const TextSpan(text: ' فرستادیم.'),
+            const TextSpan(text: ' فرستادیم، اینجا وارد کنید.'),
           ]),
           textAlign: TextAlign.center,
           style: t.bodyMedium?.copyWith(color: context.mutedColor),
@@ -1007,26 +1044,17 @@ class _VerifyCodePageState extends State<VerifyCodePage> {
         Directionality(
           textDirection: TextDirection.ltr,
           child: SizedBox(
-            height: 60,
+            height: 64,
             child: Stack(
               children: [
-                Row(
-                  children: [
-                    for (var i = 0; i < _length; i++) ...[
-                      if (i > 0) const SizedBox(width: 8),
-                      Expanded(
-                        child: _CodeBox(
-                          digit: i < code.length ? code[i] : '',
-                          active: _focus.hasFocus &&
-                              (i == code.length ||
-                                  (i == _length - 1 && code.length == _length)),
-                          error: _error != null,
-                        ),
-                      ),
-                    ],
-                  ],
+                Positioned.fill(
+                  child: _CodeField(
+                    code: code,
+                    active: _focus.hasFocus,
+                    error: _error != null,
+                  ),
                 ),
-                // The real input sits invisibly over the boxes: taps focus
+                // The real input sits invisibly over the box: taps focus
                 // it, the keyboard types into it, and long-press pastes.
                 Positioned.fill(
                   child: TextField(
@@ -1036,6 +1064,7 @@ class _VerifyCodePageState extends State<VerifyCodePage> {
                     keyboardType: TextInputType.number,
                     autofillHints: const [AutofillHints.oneTimeCode],
                     onChanged: _onChanged,
+                    onSubmitted: (_) => _verify(),
                     showCursor: false,
                     enableInteractiveSelection: true,
                     style: const TextStyle(color: Colors.transparent),
@@ -1052,6 +1081,11 @@ class _VerifyCodePageState extends State<VerifyCodePage> {
               ],
             ),
           ),
+        ),
+        const SizedBox(height: AppSpacing.lg),
+        BigButton(
+          label: _busy ? 'در حال بررسی…' : 'تأیید کد',
+          onTap: _busy || code.length < kMinCodeLength ? null : _verify,
         ),
         const SizedBox(height: AppSpacing.md),
         if (_busy)
@@ -1097,19 +1131,21 @@ class _VerifyCodePageState extends State<VerifyCodePage> {
   }
 }
 
-class _CodeBox extends StatelessWidget {
-  final String digit;
+/// The code as it's typed, digits spaced apart, in one box.
+class _CodeField extends StatelessWidget {
+  final String code;
   final bool active;
   final bool error;
 
-  const _CodeBox(
-      {required this.digit, required this.active, required this.error});
+  const _CodeField(
+      {required this.code, required this.active, required this.error});
 
   @override
   Widget build(BuildContext context) {
     final border = error
         ? AppColors.error
         : (active ? AppColors.primary : context.borderColor);
+    final t = Theme.of(context).textTheme;
     return AnimatedContainer(
       duration: const Duration(milliseconds: 150),
       alignment: Alignment.center,
@@ -1118,13 +1154,23 @@ class _CodeBox extends StatelessWidget {
         borderRadius: BorderRadius.circular(AppRadius.md),
         border: Border.all(color: border, width: active ? 2.5 : 2),
       ),
-      child: Text(
-        digit,
-        style: Theme.of(context)
-            .textTheme
-            .headlineMedium
-            ?.copyWith(fontWeight: FontWeight.w800),
-      ),
+      child: code.isEmpty
+          ? Text('کد ایمیل',
+              style: t.titleMedium?.copyWith(color: context.mutedColor))
+          : FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+                child: Text(
+                  code,
+                  style: t.headlineMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 10,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
+                ),
+              ),
+            ),
     );
   }
 }

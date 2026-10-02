@@ -12,7 +12,7 @@
 // Replaced with a hash of the build by tools/build_web.py. Each build gets
 // its own cache, so files from two builds are never mixed; a new build
 // changes this file, which is how the browser notices there's an update.
-const BUILD = '28ddef625516';
+const BUILD = 'd2e4a7d9e88c';
 const STAMPED = !BUILD.startsWith('__');
 const APP_CACHE = 'ql-app-' + BUILD;
 // Only this worker's own caches are ever cleared — never others, such as

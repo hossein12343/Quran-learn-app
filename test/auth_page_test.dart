@@ -52,15 +52,55 @@ void main() {
     expect(find.text('نام خود را وارد کنید.'), findsNothing);
   });
 
-  testWidgets('the code boxes accept Persian digits', (tester) async {
+  testWidgets('the code field accepts Persian digits', (tester) async {
     await tester.pumpWidget(_app(const VerifyCodePage(email: 'a@b.co')));
     await tester.pump();
     await tester.enterText(find.byType(TextField), '۱۲۳');
     await tester.pump();
-    for (final d in ['1', '2', '3']) {
-      expect(find.text(d), findsOneWidget);
-    }
+    // Shown in the box (and held by the invisible input over it).
+    expect(find.text('123'), findsWidgets);
     // Stop the resend countdown's timer before the test ends.
     await tester.pumpWidget(const SizedBox());
+  });
+
+  group('emailed code length', () {
+    final sent = <String>[];
+    setUp(() {
+      sent.clear();
+      debugSubmitCode = (_, code) async => sent.add(code);
+    });
+    tearDown(() => debugSubmitCode = null);
+
+    test('keeps every digit up to ten, converting Persian digits', () {
+      expect(cleanCode('۱۲۳۴۵۶۷۸'), '12345678');
+      expect(cleanCode('12 34-56'), '123456');
+      expect(cleanCode('123456789012'), '1234567890');
+    });
+
+    testWidgets('a pasted 8-digit code is sent whole', (tester) async {
+      await tester.pumpWidget(_app(const VerifyCodePage(email: 'a@b.co')));
+      await tester.pump();
+      await tester.enterText(find.byType(TextField), '12345678');
+      await tester.pump();
+      expect(sent, ['12345678']);
+      await tester.pumpWidget(const SizedBox());
+    });
+
+    testWidgets('a typed code waits for the button', (tester) async {
+      await tester.pumpWidget(_app(const VerifyCodePage(email: 'a@b.co')));
+      await tester.pump();
+      var typed = '';
+      for (final d in '123456'.split('')) {
+        typed += d;
+        await tester.enterText(find.byType(TextField), typed);
+        await tester.pump();
+      }
+      expect(sent, isEmpty, reason: 'it may be an 8-digit code');
+      await tester.ensureVisible(find.text('تأیید کد'));
+      await tester.tap(find.text('تأیید کد'));
+      await tester.pump();
+      expect(sent, ['123456']);
+      await tester.pumpWidget(const SizedBox());
+    });
   });
 }
